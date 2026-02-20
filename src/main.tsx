@@ -5,4 +5,14 @@ import './styles/index.scss';
 
 AnalyticsInitializer();
 
+const dismissSplash = () => {
+    const splash = document.getElementById('splash-screen');
+    if (splash) {
+        splash.classList.add('fade-out');
+        setTimeout(() => splash.remove(), 600);
+    }
+};
+
 ReactDOM.createRoot(document.getElementById('root')!).render(<AuthWrapper />);
+
+setTimeout(dismissSplash, 3500);

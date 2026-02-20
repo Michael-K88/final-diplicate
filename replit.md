@@ -4,6 +4,7 @@
 A React-based trading bot builder application (Deriv Bot) that allows users to create automated trading strategies using a visual block-based editor (Blockly). Built with TypeScript, React 18, and rsbuild as the build tool.
 
 ## Recent Changes
+- 2026-02-20: Renamed site to "Blue Traders" (bluetraders.site), added splash screen with live market data animation, progress bar, and navy blue branding.
 - 2026-02-20: Changed theme color to navy blue (#003366) - updated color palette across all accent colors, buttons, tabs, badges, and status indicators. Default theme set to dark mode.
 - 2026-02-20: Initial Replit environment setup - configured rsbuild for port 5000, installed dependencies, set up workflow and deployment.
 
