@@ -12,23 +12,20 @@ export const tabs_title: TTabsTitle = Object.freeze({
 });
 
 export const DBOT_TABS: TDashboardTabIndex = Object.freeze({
-    DASHBOARD: 0,
-    BOT_BUILDER: 1,
-    CHART: 2,
-    FREE_BOTS: 3,
-    COPY_TRADING: 4,
-    SMART_TRADER: 5,
-    DTRADER: 6,
-    // Keep TUTORIAL as a non-active sentinel to avoid index mismatches in legacy checks
-    TUTORIAL: 999,
+    DASHBOARD: 999,
+    BOT_BUILDER: 0,
+    CHART: 998,
+    FREE_BOTS: 1,
+    COPY_TRADING: 2,
+    SMART_TRADER: 3,
+    DTRADER: 4,
+    TUTORIAL: 997,
 });
 
 export const MAX_STRATEGIES = 10;
 
 export const TAB_IDS = [
-    'id-dbot-dashboard',
     'id-bot-builder',
-    'id-charts',
     'id-free-bots',
     'id-copy-trading',
     'id-smart-trader',
