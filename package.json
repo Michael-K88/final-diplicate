@@ -6,7 +6,7 @@
         "node": "20.x"
     },
     "scripts": {
-        "start": "rsbuild dev -o",
+        "start": "rsbuild dev",
         "build": "rsbuild build",
         "watch": "rsbuild build --watch",
         "serve": "http-server dist -p 8443 -a localhost -o",
@@ -158,7 +158,7 @@
         "webpack-dev-server": "^5.1.0"
     },
     "optionalDependencies": {
-        "@rspack/binding-linux-x64-gnu": "1.0.14",
+        "@rspack/binding-linux-x64-gnu": "^1.0.14",
         "sass-embedded-android-arm": "1.85.1",
         "sass-embedded-android-arm64": "1.85.1",
         "sass-embedded-android-ia32": "1.85.1",

@@ -75,11 +75,14 @@ export default defineConfig({
         template: './index.html',
     },
     server: {
-        port: 3000,
-        host: '0.0.0.0', // Allow external connections
+        port: 5000,
+        host: '0.0.0.0',
         compress: true,
-        historyApiFallback: true, // Enable client-side routing fallback
-        https: false, // Disable HTTPS for easier local access
+        historyApiFallback: true,
+        open: false,
+        headers: {
+            'Cache-Control': 'no-cache',
+        },
     },
     dev: {
         hmr: true,
