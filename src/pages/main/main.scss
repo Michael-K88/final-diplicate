@@ -52,12 +52,12 @@
 
         .dc-tabs {
             &__active-line {
-                background-color: #FFA500;
+                background-color: #2d6a4f;
                 transition: none;
             }
 
             &__active {
-                background: #FFA500;
+                background: #2d6a4f;
                 color: var(--text-prominent) !important;
 
                 // Ensure active tab text uses theme-aware color
@@ -76,7 +76,7 @@
 
 
             &__list {
-                background: #FFA500;
+                background: #2d6a4f;
                 justify-content: start;
 
                 @include mobile-or-tablet-screen {

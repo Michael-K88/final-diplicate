@@ -39,10 +39,13 @@
     --brand-white: #{constants.$color-white};
     --brand-dark-grey: #{constants.$color-black};
     --brand-red-coral: #{constants.$color-red};
-    --brand-orange: #{constants.$color-orange};
+    --brand-orange: #{constants.$color-dark-green-primary};
+    --brand-dark-green: #{constants.$color-dark-green-primary};
+    --brand-dark-green-light: #{constants.$color-dark-green-light};
+    --brand-dark-green-accent: #{constants.$color-dark-green-accent};
 
     // Brand secondary colors
-    --brand-secondary: #{constants.$color-green};
+    --brand-secondary: #{constants.$color-dark-green-light};
 
     // App Cards gradient background
     --app-card-virtual: #{constants.$gradient-virtual};
@@ -75,10 +78,10 @@
         --text-disabled: #{constants.$color-grey-1};
         --text-disabled-1: #{constants.$color-grey-6};
         --text-loss-danger: #{constants.$color-red-1};
-        --text-profit-success: #{constants.$color-green-1};
+        --text-profit-success: #{constants.$color-dark-green-primary};
         --text-warning: #{constants.$color-yellow};
         --text-red: #{constants.$color-red};
-        --text-green: #{constants.$color-green-6};
+        --text-green: #{constants.$color-dark-green-lighter};
         --text-blue: #{constants.$color-blue-3};
         --text-info-blue: #{constants.$color-blue};
         --text-info-blue-background: #{constants.$color-blue-5};
@@ -91,23 +94,23 @@
         --text-hint: #{constants.$color-black-1};
 
         // Purchase
-        --purchase-main-1: #{constants.$color-green-1};
-        --purchase-section-1: #{constants.$color-green-2};
+        --purchase-main-1: #{constants.$color-dark-green-primary};
+        --purchase-section-1: #{constants.$color-dark-green-dark};
         --purchase-main-2: #{constants.$color-red-1};
         --purchase-section-2: #{constants.$color-red-4};
         --purchase-disabled-main: #{constants.$color-grey-3};
         --purchase-disabled-section: #{constants.$color-grey-4};
 
         // Buttons
-        --button-primary-default: #FFA500;
+        --button-primary-default: #{constants.$color-dark-green-primary};
         --button-secondary-default: #{constants.$color-grey-1};
         --button-tertiary-default: transparent;
         --button-primary-light-default: #{constants.$alpha-color-red-2};
-        --button-primary-hover: #{constants.$color-red-5};
+        --button-primary-hover: #{constants.$color-dark-green-dark};
         --button-secondary-hover: #{constants.$alpha-color-black-3};
         --button-tertiary-hover: #{constants.$alpha-color-red-1};
         --button-primary-light-hover: #{constants.$alpha-color-red-3};
-        --button-toggle-primary: #{constants.$color-blue-3};
+        --button-toggle-primary: #{constants.$color-dark-green-primary};
         --button-toggle-secondary: #{constants.$color-grey-5};
         --button-toggle-alternate: #{constants.$color-white};
 
@@ -154,7 +157,7 @@
         --status-success: #{constants.$color-green-1};
         --status-warning: #{constants.$color-yellow};
         --status-warning-transparent: #{constants.$alpha-color-yellow-1};
-        --status-transfer: #{constants.$color-orange};
+        --status-transfer: #{constants.$color-dark-green-light};
         --status-info: #{constants.$color-blue};
         --status-colored-background: #{constants.$color-white};
         --status-alert-background: #{constants.$color-yellow-3};
@@ -184,7 +187,7 @@
         --badge-white: #{constants.$color-white};
         --badge-blue: #{constants.$color-blue-4};
         --badge-violet: #{constants.$color-blue-2};
-        --badge-green: #{constants.$color-green-3};
+        --badge-green: #{constants.$color-dark-green-lighter};
 
         // TradersHub Banner
         --traders-hub-banner-border-color: #{constants.$color-grey-4};
@@ -221,7 +224,7 @@
         --text-primary: #{constants.$color-grey-1};
         --text-disabled: #{constants.$color-black-6};
         --text-disabled-1: #{constants.$color-black-6};
-        --text-profit-success: #{constants.$color-green-3};
+        --text-profit-success: #{constants.$color-dark-green-lighter};
         --text-loss-danger: #{constants.$color-red-2};
         --text-red: #{constants.$color-red};
         --text-colored-background: #{constants.$color-white};
@@ -235,23 +238,23 @@
         --icon-black-plus: #{constants.$color-white};
 
         // Purchase
-        --purchase-main-1: #{constants.$color-green-3};
-        --purchase-section-1: #{constants.$color-green-4};
+        --purchase-main-1: #{constants.$color-dark-green-light};
+        --purchase-section-1: #{constants.$color-dark-green-dark};
         --purchase-main-2: #{constants.$color-red-2};
         --purchase-section-2: #{constants.$color-red-3};
         --purchase-disabled-main: #{constants.$color-black-4};
         --purchase-disabled-section: #{constants.$color-black};
 
         // Buttons
-        --button-primary-default: #FFA500;
+        --button-primary-default: #{constants.$color-dark-green-primary};
         --button-secondary-default: #{constants.$color-grey-7};
         --button-tertiary-default: transparent;
         --button-primary-light-default: #{constants.$alpha-color-red-2};
-        --button-primary-hover: #{constants.$color-red-5};
+        --button-primary-hover: #{constants.$color-dark-green-dark};
         --button-secondary-hover: #{constants.$alpha-color-white-3};
         --button-tertiary-hover: #{constants.$alpha-color-red-1};
         --button-primary-light-hover: #{constants.$alpha-color-red-3};
-        --button-toggle-primary: #{constants.$color-blue-3};
+        --button-toggle-primary: #{constants.$color-dark-green-primary};
         --button-toggle-secondary: #{constants.$color-black-8};
         --button-toggle-alternate: #{constants.$color-black-8};
         --button-get-started-bg: #{constants.$color-white};
@@ -299,7 +302,7 @@
         --status-warning: #{constants.$color-yellow};
         --status-warning-transparent: #{constants.$alpha-color-yellow-1};
         --status-success: #{constants.$color-green-3};
-        --status-transfer: #{constants.$color-orange};
+        --status-transfer: #{constants.$color-dark-green-light};
         --status-info: #{constants.$color-blue};
         --status-colored-background: #{constants.$color-white};
         --status-alert-background: #{constants.$color-yellow-3};
@@ -325,7 +328,7 @@
         --badge-white: #{constants.$color-white};
         --badge-blue: #{constants.$color-blue-4};
         --badge-violet: #{constants.$color-blue-2};
-        --badge-green: #{constants.$color-green-3};
+        --badge-green: #{constants.$color-dark-green-lighter};
 
         // TradersHub Banner
         --traders-hub-banner-border-color: #{constants.$color-black-5};

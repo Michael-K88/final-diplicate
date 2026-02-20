@@ -70,7 +70,7 @@
     &:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-        border-color: #FFA500;
+        border-color: #2d6a4f;
     }
 
     &__header {
@@ -107,8 +107,8 @@
         }
 
         &--intermediate {
-            background: #fff3e0;
-            color: #f57c00;
+            background: #e8f5ec;
+            color: #2d6a4f;
         }
 
         &--advanced {
@@ -156,14 +156,14 @@
         border-radius: 6px;
         font-weight: 600;
         transition: all 0.3s ease;
-        background: #FFA500 !important; // Match primary/navigation color
-        color: #000000 !important; // Black text on orange for readability
+        background: #2d6a4f !important;
+        color: #FFFFFF !important;
         border: none !important;
 
         &:hover:not(:disabled) {
             transform: translateY(-1px);
-            background: #e69500 !important; // Slightly darker orange on hover
-            color: #000000 !important;
+            background: #1b4332 !important;
+            color: #FFFFFF !important;
         }
 
         &:disabled {
@@ -199,7 +199,7 @@
         border-color: var(--border-normal);
 
         &:hover {
-            border-color: #FFA500;
+            border-color: #2d6a4f;
         }
 
         &__badge {
@@ -209,8 +209,8 @@
             }
 
             &--intermediate {
-                background: rgba(245, 124, 0, 0.2);
-                color: #ffb74d;
+                background: rgba(45, 106, 79, 0.2);
+                color: #74c69d;
             }
 
             &--advanced {

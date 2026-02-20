@@ -320,34 +320,33 @@
     }
 }
 
-// Custom button styles to match screenshot
 .auth-login-button {
-    background: #2E3A47 !important; // Dark background
-    color: #FFFFFF !important; // White text
-    border: 1px solid #2E3A47 !important;
+    background: #1b4332 !important;
+    color: #FFFFFF !important;
+    border: 1px solid #1b4332 !important;
 
     &:hover:not([disabled]) {
-        background: #1E2A37 !important; // Darker on hover
-        border-color: #1E2A37 !important;
+        background: #143d2b !important;
+        border-color: #143d2b !important;
     }
 
     .dc-btn__text {
-        color: #FFFFFF !important; // White text
+        color: #FFFFFF !important;
     }
 }
 
 .auth-signup-button {
-    background: #4A90E2 !important; // Light blue background
-    color: #FFFFFF !important; // White text (changed from dark to match screenshot better)
-    border: 1px solid #4A90E2 !important;
+    background: #2d6a4f !important;
+    color: #FFFFFF !important;
+    border: 1px solid #2d6a4f !important;
 
     &:hover:not([disabled]) {
-        background: #357ABD !important; // Darker blue on hover
-        border-color: #357ABD !important;
+        background: #1b4332 !important;
+        border-color: #1b4332 !important;
     }
 
     .dc-btn__text {
-        color: #FFFFFF !important; // White text
+        color: #FFFFFF !important;
     }
 }
 
