@@ -321,13 +321,13 @@
 }
 
 .auth-login-button {
-    background: #1b4332 !important;
+    background: #1d4ed8 !important;
     color: #FFFFFF !important;
-    border: 1px solid #1b4332 !important;
+    border: 1px solid #1d4ed8 !important;
 
     &:hover:not([disabled]) {
-        background: #143d2b !important;
-        border-color: #143d2b !important;
+        background: #1e40af !important;
+        border-color: #1e40af !important;
     }
 
     .dc-btn__text {
@@ -336,13 +336,13 @@
 }
 
 .auth-signup-button {
-    background: #2d6a4f !important;
+    background: #2563eb !important;
     color: #FFFFFF !important;
-    border: 1px solid #2d6a4f !important;
+    border: 1px solid #2563eb !important;
 
     &:hover:not([disabled]) {
-        background: #1b4332 !important;
-        border-color: #1b4332 !important;
+        background: #1d4ed8 !important;
+        border-color: #1d4ed8 !important;
     }
 
     .dc-btn__text {
