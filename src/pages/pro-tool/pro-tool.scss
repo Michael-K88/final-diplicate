@@ -60,7 +60,7 @@
       justify-content: space-between;
       
       &.digits {
-        background: linear-gradient(90deg, #3b82f6, #0ea5e9, #06b6d4);
+        background: linear-gradient(90deg, #2196F3, #0ea5e9, #06b6d4);
       }
       
       &.evenodd {
@@ -174,8 +174,8 @@
             
             &:focus {
               outline: none;
-              border-color: #3b82f6;
-              box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+              border-color: #2196F3;
+              box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
             }
           }
         }
