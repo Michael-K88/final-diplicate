@@ -70,7 +70,7 @@
     &:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-        border-color: #2196F3;
+        border-color: #003366;
     }
 
     &__header {
@@ -107,8 +107,8 @@
         }
 
         &--intermediate {
-            background: #e3f2fd;
-            color: #2196F3;
+            background: #e0e8f0;
+            color: #003366;
         }
 
         &--advanced {
@@ -156,13 +156,13 @@
         border-radius: 6px;
         font-weight: 600;
         transition: all 0.3s ease;
-        background: #2196F3 !important;
+        background: #003366 !important;
         color: #FFFFFF !important;
         border: none !important;
 
         &:hover:not(:disabled) {
             transform: translateY(-1px);
-            background: #1976D2 !important;
+            background: #002244 !important;
             color: #FFFFFF !important;
         }
 
@@ -199,18 +199,18 @@
         border-color: var(--border-normal);
 
         &:hover {
-            border-color: #2196F3;
+            border-color: #003366;
         }
 
         &__badge {
             &--beginner {
-                background: rgba(33, 150, 243, 0.2);
-                color: #64B5F6;
+                background: rgba(0, 51, 102, 0.2);
+                color: #336699;
             }
 
             &--intermediate {
-                background: rgba(66, 165, 245, 0.2);
-                color: #90CAF9;
+                background: rgba(0, 64, 128, 0.2);
+                color: #4d88b8;
             }
 
             &--advanced {
