@@ -24,7 +24,7 @@ type TTabsProps = {
     has_active_line?: boolean;
     has_bottom_line?: boolean;
     header_fit_content?: boolean;
-    history: History;
+    history?: History;
     icon_color?: string;
     icon_size?: number;
     is_100vw?: boolean;
@@ -65,7 +65,9 @@ const Tabs = ({
     const active_tab_ref = React.useRef<HTMLLIElement>(null);
     const tabs_wrapper_ref = React.useRef<HTMLUListElement>(null);
     const pushHash = (hash: string) => {
-        history.replace(`${history.location.pathname}${window.location.search}#${hash}`);
+        if (history && (history as any).replace && (history as any).location) {
+            (history as any).replace(`${(history as any).location.pathname}${window.location.search}#${hash}`);
+        }
     };
 
     const setActiveLineStyle = React.useCallback(() => {
