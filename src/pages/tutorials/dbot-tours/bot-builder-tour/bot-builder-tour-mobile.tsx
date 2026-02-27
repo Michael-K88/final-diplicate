@@ -37,12 +37,7 @@ const BotBuilderTourMobile = observer(() => {
         if (tour_step === 2) toggleTourLoadModal(true);
         else if (active_tour !== '') toggleTourLoadModal(false);
         const token = getSetting('bot_builder_token');
-        if (!token && active_tab === DBOT_TABS.BOT_BUILDER) {
-            if (is_open) {
-                setTourDialogVisibility(false);
-            } else {
-                setTourDialogVisibility(true);
-            }
+        if (false) {
             setShowMobileTourDialog(true);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps

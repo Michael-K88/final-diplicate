@@ -414,7 +414,7 @@ export default class DashboardStore implements IDashboardStore {
     };
     setTourEnd = (param: TTourType): void => {
         const { key } = param;
-        if (this.core.ui.is_mobile) this.setTourDialogVisibility(true);
+        if (false) this.setTourDialogVisibility(true);
         setTourSettings(new Date().getTime(), `${key}_token`);
     };
 

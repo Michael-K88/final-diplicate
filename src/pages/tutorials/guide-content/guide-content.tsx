@@ -39,17 +39,7 @@ const GuideContent = ({ guide_tab_content, video_tab_content, is_dialog_open }: 
     } = dashboard;
 
     const triggerTour = (type: string) => {
-        if (type === 'OnBoard') {
-            removeKeyValue('onboard_tour_token');
-            setActiveTab(DBOT_TABS.DASHBOARD);
-            if (!isDesktop) setActiveTour('onboarding');
-            setTourDialogVisibility(true);
-        } else {
-            setActiveTab(DBOT_TABS.BOT_BUILDER);
-            if (!isDesktop) setActiveTour('bot_builder');
-            setTourDialogVisibility(true);
-            if (!isDesktop) setShowMobileTourDialog(true);
-        }
+        setActiveTab(DBOT_TABS.BOT_BUILDER);
     };
 
     const handleKeyboardEvent = (e: KeyboardEvent) => {
