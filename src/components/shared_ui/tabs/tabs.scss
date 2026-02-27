@@ -17,6 +17,8 @@
         line-height: 38px;
         display: flex;
         position: relative;
+        background-color: #ffffff;
+        z-index: 3;
 
         @include mobile-or-tablet-screen {
             justify-content: center;
@@ -80,7 +82,9 @@
         font-weight: bold !important;
         text-align: center;
         white-space: nowrap;
-        color: var(--text-prominent) !important;
+        color: #003366 !important;
+        background-color: #ffffff !important;
+        padding: 0.8rem 1.2rem;
         font-family:
             'IBM Plex Sans',
             -apple-system,
@@ -90,18 +94,17 @@
             sans-serif !important;
         -webkit-touch-callout: none;
         -webkit-tap-highlight-color: transparent;
+        transition: background-color 0.2s ease, color 0.2s ease;
 
-        // Theme-aware tab text
         * {
-            color: var(--text-prominent) !important;
+            color: #003366 !important;
             font-weight: bold !important;
         }
 
-        // Theme-aware tab icons
         svg,
         svg > path,
         svg > g > path {
-            fill: var(--text-prominent) !important;
+            fill: #003366 !important;
         }
 
         &__counter {
@@ -130,7 +133,7 @@
             position: relative;
 
             &:after {
-                border-bottom: 2px solid var(--brand-red-coral);
+                border-bottom: 2px solid #003366;
                 content: '';
                 position: absolute;
                 left: 0;
@@ -141,33 +144,32 @@
 
         &:not(.dc-tabs__active) {
             cursor: pointer;
-            color: var(--text-less-prominent) !important;
+            color: #336699 !important;
 
-            // Non-active tab text
             * {
-                color: var(--text-less-prominent) !important;
+                color: #336699 !important;
                 font-weight: bold !important;
             }
 
-            // Non-active tab icons
             svg,
             svg > path,
             svg > g > path {
-                fill: var(--text-less-prominent) !important;
+                fill: #336699 !important;
             }
 
             &:hover {
-                color: var(--text-prominent) !important;
+                color: #003366 !important;
+                background-color: #f0f4f8 !important;
 
                 * {
-                    color: var(--text-prominent) !important;
+                    color: #003366 !important;
                     font-weight: bold !important;
                 }
 
                 svg,
                 svg > path,
                 svg > g > path {
-                    fill: var(--text-prominent) !important;
+                    fill: #003366 !important;
                 }
             }
         }
@@ -179,20 +181,18 @@
 
     &__active {
         font-weight: bold !important;
-        color: var(--text-prominent) !important;
-        background-color: var(--general-hover) !important;
+        color: #003366 !important;
+        background-color: #e8eef4 !important;
 
-        // Active tab text
         * {
-            color: var(--text-prominent) !important;
+            color: #003366 !important;
             font-weight: bold !important;
         }
 
-        // Active tab icons
         svg,
         svg > path,
         svg > g > path {
-            fill: var(--text-prominent) !important;
+            fill: #003366 !important;
         }
     }
 
@@ -205,7 +205,7 @@
 
         /* rtl:end:ignore */
         height: 2px;
-        background: var(--text-prominent) !important;
+        background: #003366 !important;
         transition: all ease-in-out 0.3s;
 
         &--top {
