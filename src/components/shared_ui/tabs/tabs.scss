@@ -17,7 +17,7 @@
         line-height: 38px;
         display: flex;
         position: relative;
-        background-color: #ffffff;
+        background-color: var(--general-section-1);
         z-index: 3;
 
         @include mobile-or-tablet-screen {
@@ -82,8 +82,8 @@
         font-weight: bold !important;
         text-align: center;
         white-space: nowrap;
-        color: #003366 !important;
-        background-color: #ffffff !important;
+        color: #ffffff !important;
+        background-color: transparent !important;
         padding: 0.8rem 1.2rem;
         font-family:
             'IBM Plex Sans',
@@ -97,14 +97,14 @@
         transition: background-color 0.2s ease, color 0.2s ease;
 
         * {
-            color: #003366 !important;
+            color: #ffffff !important;
             font-weight: bold !important;
         }
 
         svg,
         svg > path,
         svg > g > path {
-            fill: #003366 !important;
+            fill: #ffffff !important;
         }
 
         &__counter {
@@ -133,7 +133,7 @@
             position: relative;
 
             &:after {
-                border-bottom: 2px solid #003366;
+                border-bottom: 2px solid #ffffff;
                 content: '';
                 position: absolute;
                 left: 0;
@@ -144,32 +144,32 @@
 
         &:not(.dc-tabs__active) {
             cursor: pointer;
-            color: #336699 !important;
+            color: rgba(255, 255, 255, 0.7) !important;
 
             * {
-                color: #336699 !important;
+                color: rgba(255, 255, 255, 0.7) !important;
                 font-weight: bold !important;
             }
 
             svg,
             svg > path,
             svg > g > path {
-                fill: #336699 !important;
+                fill: rgba(255, 255, 255, 0.7) !important;
             }
 
             &:hover {
-                color: #003366 !important;
-                background-color: #f0f4f8 !important;
+                color: #ffffff !important;
+                background-color: rgba(255, 255, 255, 0.1) !important;
 
                 * {
-                    color: #003366 !important;
+                    color: #ffffff !important;
                     font-weight: bold !important;
                 }
 
                 svg,
                 svg > path,
                 svg > g > path {
-                    fill: #003366 !important;
+                    fill: #ffffff !important;
                 }
             }
         }
@@ -181,18 +181,18 @@
 
     &__active {
         font-weight: bold !important;
-        color: #003366 !important;
-        background-color: #e8eef4 !important;
+        color: #ffffff !important;
+        background-color: rgba(255, 255, 255, 0.15) !important;
 
         * {
-            color: #003366 !important;
+            color: #ffffff !important;
             font-weight: bold !important;
         }
 
         svg,
         svg > path,
         svg > g > path {
-            fill: #003366 !important;
+            fill: #ffffff !important;
         }
     }
 
@@ -205,7 +205,7 @@
 
         /* rtl:end:ignore */
         height: 2px;
-        background: #003366 !important;
+        background: #ffffff !important;
         transition: all ease-in-out 0.3s;
 
         &--top {
