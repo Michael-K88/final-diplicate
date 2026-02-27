@@ -40,6 +40,5 @@ export const setTourSettings = (param: number, type: string) => {
 };
 
 export const tour_list: TTourList = Object.freeze({
-    0: 'onboarding',
-    1: 'bot_builder',
+    0: 'bot_builder',
 });

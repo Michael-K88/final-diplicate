@@ -1,5 +1,6 @@
 import React from 'react';
 import { observer } from 'mobx-react-lite';
+import { DBOT_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
 import { getSetting } from '@/utils/settings';
 import ReactJoyrideWrapper from '../common/react-joyride-wrapper';
@@ -19,7 +20,7 @@ const OnboardingTourDesktop = observer(() => {
     }, [is_close_tour, is_finished, setActiveTour, setIsCloseTour]);
 
     const token = getSetting('onboard_tour_token');
-    if (!token && active_tab === 0) setTourDialogVisibility(true);
+    if (!token && active_tab === DBOT_TABS.DASHBOARD) setTourDialogVisibility(true);
 
     return (
         <>

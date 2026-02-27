@@ -21,7 +21,7 @@ const TourStartDialog = observer(() => {
     const { active_tab, is_tour_dialog_visible, setTourDialogVisibility, setActiveTour, setShowMobileTourDialog } =
         dashboard;
     const { isDesktop } = useDevice();
-    const tour_token = active_tab === 0 ? 'onboard_tour_token' : 'bot_builder_token';
+    const tour_token = active_tab === DBOT_TABS.BOT_BUILDER ? 'bot_builder_token' : 'bot_builder_token';
     const toggleTour = () => {
         if (!isDesktop) setShowMobileTourDialog(false);
         setTourDialogVisibility(false);
@@ -29,7 +29,7 @@ const TourStartDialog = observer(() => {
         setTourSettings(new Date().getTime(), tour_token);
     };
 
-    const onboard_tour = active_tab === DBOT_TABS.DASHBOARD;
+    const onboard_tour = false;
     const tour_dialog_info = getTourDialogInfo(!isDesktop);
     const tour_dialog_action = getTourDialogAction(!isDesktop);
     const [is_tour_open, setIsTourOpen] = React.useState(false);
