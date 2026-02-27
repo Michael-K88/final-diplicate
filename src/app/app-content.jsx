@@ -40,6 +40,18 @@ const AppContent = observer(() => {
     const { showDigitalOptionsMaltainvestError } = app;
     const { is_dark_mode_on } = useThemeSwitcher();
 
+    useEffect(() => {
+        const body = document.querySelector('body');
+        if (!body) return;
+        if (is_dark_mode_on) {
+            body.classList.remove('theme--light');
+            body.classList.add('theme--dark');
+        } else {
+            body.classList.remove('theme--dark');
+            body.classList.add('theme--light');
+        }
+    }, [is_dark_mode_on]);
+
     const { recovered_transactions, recoverPendingContracts } = transactions;
     const is_subscribed_to_msg_listener = React.useRef(false);
     const msg_listener = React.useRef(null);
