@@ -348,19 +348,43 @@ const ProTool = observer(() => {
 
       <div className="pro-tool__digit-chart">
         <div className="digit-chart__title">Digit Distribution</div>
-        <div className="digit-chart__bars">
-          {digitCounts.map((count, i) => {
-            const maxCount = Math.max(...digitCounts, 1);
-            const height = (count / maxCount) * 100;
+        <div className="digit-chart__circles">
+          {(() => {
+            const total = digitHistory.length || 1;
+            const uniqueSorted = [...new Set(digitCounts)].filter(v => v > 0).sort((a, b) => b - a);
+            const len = uniqueSorted.length;
+            return digitCounts.map((count, i) => {
+            const pct = Math.round((count / total) * 100);
+            const circumference = 2 * Math.PI * 28;
+            const offset = circumference - (pct / 100) * circumference;
+            let colorClass = 'default';
+            if (count > 0 && len >= 2) {
+              const rankFromTop = uniqueSorted.indexOf(count);
+              const rankFromBottom = len - 1 - rankFromTop;
+              if (rankFromTop === 0) colorClass = 'green';
+              else if (rankFromBottom === 0) colorClass = 'red';
+              else if (rankFromTop === 1) colorClass = 'blue';
+              else if (rankFromBottom === 1) colorClass = 'yellow';
+            }
             return (
-              <div key={i} className="digit-bar">
-                <div className="digit-bar__fill" style={{ height: `${height}%` }}>
-                  <span className="digit-bar__count">{count}</span>
+              <div key={i} className={`digit-circle ${lastDigit === i ? 'pulse' : ''}`}>
+                <svg className="digit-circle__svg" viewBox="0 0 64 64">
+                  <circle className="digit-circle__track" cx="32" cy="32" r="28" />
+                  <circle
+                    className={`digit-circle__fill ${colorClass}`}
+                    cx="32" cy="32" r="28"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={offset}
+                  />
+                </svg>
+                <div className="digit-circle__content">
+                  <span className="digit-circle__digit">{i}</span>
+                  <span className={`digit-circle__pct ${colorClass}`}>{pct}%</span>
                 </div>
-                <span className={`digit-bar__label ${lastDigit === i ? 'active' : ''}`}>{i}</span>
               </div>
             );
-          })}
+          });
+          })()}
         </div>
       </div>
 
