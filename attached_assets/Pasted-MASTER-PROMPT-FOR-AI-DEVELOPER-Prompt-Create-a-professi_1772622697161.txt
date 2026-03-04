@@ -1,0 +1,189 @@
+MASTER PROMPT FOR AI / DEVELOPER
+
+Prompt:
+
+Create a professional web-based Batch Buying Tool connected to the Deriv WebSocket API that allows users to execute bulk trades for multiple synthetic index markets.
+
+The application must support batch purchasing of contracts for the following contract types:
+
+• Odd / Even
+• Over / Under
+• Rise / Fall
+• Matches / Differs
+
+🔹 Markets Dropdown (Volatility Indices List)
+
+The Select Market dropdown must include:
+
+Volatility 10 (1s)
+
+Volatility 10 Index
+
+Volatility 15 (1s)
+
+Volatility 25 (1s)
+
+Volatility 25 Index
+
+Volatility 30 (1s)
+
+Volatility 50 (1s)
+
+Volatility 50 Index
+
+Volatility 75 (1s)
+
+Volatility 75 Index
+
+Volatility 90 (1s)
+
+Volatility 100 (1s)
+
+Volatility 100 Index
+
+Each market should automatically map to its correct Deriv symbol (e.g., R_10, R_10_1S, R_100, etc.).
+
+🔹 Core Features
+
+The tool must include:
+
+Deriv API Integration
+
+WebSocket connection to wss://ws.derivws.com/websockets/v3
+
+Token authentication input field
+
+Real-time tick subscription
+
+Proposal generation before buy
+
+Automatic batch contract purchase execution
+
+Trade Configuration Panel
+
+Select Market dropdown
+
+Contract Type dropdown
+
+Duration (ticks)
+
+Stake input
+
+Number of Bulk Trades input
+
+Prediction digit selector (for Over/Under & Matches/Differs)
+
+Contract Logic Handling
+
+Odd/Even → DIGITODD / DIGITEVEN
+
+Over/Under → DIGITOVER / DIGITUNDER
+
+Matches/Differs → DIGITMATCH / DIGITDIFF
+
+Rise/Fall → CALL / PUT
+
+Batch Execution Logic
+
+Loop buy requests based on number of bulk trades
+
+Optional delay setting between trades (milliseconds)
+
+Stop batch if insufficient balance
+
+Show success/failure status per trade
+
+Digit Statistics Panel
+
+Display last 1000 tick digit frequency (0–9)
+
+Show percentage distribution
+
+Highlight selected digit
+
+Live Information Panel
+
+Current tick price
+
+Account balance
+
+Total stake used in batch
+
+Total wins/losses
+
+Profit/Loss summary
+
+🔹 UI Requirements
+
+Modern trading dashboard style
+
+Card-based layout
+
+Gradient buy buttons
+
+Clear distinction between Buy Up / Buy Down / Even / Odd / Matches / Differs
+
+Responsive design (mobile compatible)
+
+Loading spinner during batch execution
+
+🔹 Risk Controls
+
+Maximum batch size limit
+
+Stop-loss input
+
+Take-profit input
+
+Disable buy button during execution
+
+🔹 Technical Stack
+
+HTML5
+
+CSS3 (or Tailwind)
+
+Vanilla JavaScript
+
+WebSocket API (Deriv)
+
+The code must be clean, modular, and well-commented.
+
+Include error handling for:
+
+API disconnection
+
+Invalid token
+
+Insufficient balance
+
+Proposal rejection
+
+🔹 Bonus Features (Optional)
+
+Trade history table
+
+CSV export
+
+Auto compounding mode
+
+Martingale toggle
+
+The final product should function as a professional batch trading automation tool for Deriv synthetic indices.
+
+If you want, I can also generate:
+
+🔹 The complete working HTML + JS code
+
+🔹 The WebSocket logic only
+
+🔹 A React version
+
+🔹 A risk-managed professional version
+
+🔹 Or improve your current UI design
+
+Just tell me what level you want 🚀
+
+Want to upload more files? Try Plus for free. Your upload limit will reset tomorrow after 2:11 PM.
+Claim free offer
