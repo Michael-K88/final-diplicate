@@ -18,6 +18,7 @@ import './app-root.scss';
 
 const Layout = lazy(() => import('../components/layout'));
 const AppRoot = lazy(() => import('./app-root'));
+const BatchTraderPage = lazy(() => import('../pages/batch-trader'));
 
 const { TRANSLATIONS_CDN_URL, R2_PROJECT_NAME, CROWDIN_BRANCH_NAME } = process.env;
 const i18nInstance = initializeI18n({
@@ -52,6 +53,7 @@ const router = createBrowserRouter(
         >
             {/* All child routes will be passed as children to Layout */}
             <Route index element={<AppRoot />} />
+            <Route path='batch-trader' element={<Suspense fallback={<ChunkLoader message='Loading Batch Trader...' />}><BatchTraderPage /></Suspense>} />
             <Route path='endpoint' element={<Endpoint />} />
             <Route path='callback' element={<CallbackPage />} />
             {/* Catch-all route for debugging */}
@@ -62,7 +64,7 @@ const router = createBrowserRouter(
                         <h1>🔍 Route Debug Info</h1>
                         <p>Current URL: {window.location.href}</p>
                         <p>Pathname: {window.location.pathname}</p>
-                        <p>Available routes: /, /endpoint, /callback</p>
+                        <p>Available routes: /, /batch-trader, /endpoint, /callback</p>
                         <button onClick={() => (window.location.href = '/')}>Go to Home</button>
                     </div>
                 }
