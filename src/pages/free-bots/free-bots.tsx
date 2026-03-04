@@ -27,9 +27,18 @@ const FreeBots = observer(() => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Manifest-driven list for instant load and prefetch
     const getXmlFiles = () => {
         return [
+            'AUTO C4 PRO Version.xml',
+            'Bandwagon Entry Point Bot.xml',
+            'Differs-ODD-EVEN.xml',
+            'Gold Miner Pro.xml',
+            'Greenprint Profit Bot.xml',
+            'H L Auto Vault.xml',
+            'Master AI Under 9.xml',
+            'Mkorean SV4.xml',
+            'Super Elite.xml',
+            'Upgraded Candle Mine.xml',
             '$DollarprinterbotOrignal$.xml',
             '360 PRINTER BOT____ [ Version 2.2 ].xml',
             'Candle-Mine Version 2  (2).xml',
