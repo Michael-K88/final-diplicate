@@ -40,6 +40,22 @@ interface SymbolSignals {
 
 const TICK_HISTORY_SIZE = 150;
 
+const ALLOWED_SYMBOLS: { symbol: string; display_name: string }[] = [
+    { symbol: '1HZ10V', display_name: 'Volatility 10 (1s)' },
+    { symbol: 'R_10', display_name: 'Volatility 10 Index' },
+    { symbol: '1HZ15V', display_name: 'Volatility 15 (1s)' },
+    { symbol: '1HZ25V', display_name: 'Volatility 25 (1s)' },
+    { symbol: 'R_25', display_name: 'Volatility 25 Index' },
+    { symbol: '1HZ30V', display_name: 'Volatility 30 (1s)' },
+    { symbol: '1HZ50V', display_name: 'Volatility 50 (1s)' },
+    { symbol: 'R_50', display_name: 'Volatility 50 Index' },
+    { symbol: '1HZ75V', display_name: 'Volatility 75 (1s)' },
+    { symbol: 'R_75', display_name: 'Volatility 75 Index' },
+    { symbol: '1HZ90V', display_name: 'Volatility 90 (1s)' },
+    { symbol: '1HZ100V', display_name: 'Volatility 100 (1s)' },
+    { symbol: 'R_100', display_name: 'Volatility 100 Index' },
+];
+
 const SIGNAL_TYPES = [
     { id: 'over2', label: 'OVER 2', threshold: '>75%', color: '#10b981' },
     { id: 'under7', label: 'UNDER 7', threshold: '>75%', color: '#3b82f6' },
@@ -316,14 +332,10 @@ const SmartTrader = observer(() => {
 
         const init = async () => {
             try {
-                const { active_symbols, error } = await api.send({ active_symbols: 'brief' });
-                if (error) throw error;
-                const syn = (active_symbols || [])
-                    .filter((s: any) => /synthetic/i.test(s.market) || /^R_/.test(s.symbol))
-                    .map((s: any) => ({ symbol: s.symbol, display_name: s.display_name }));
+                const syn = ALLOWED_SYMBOLS;
                 setSymbols(syn);
                 setIsConnected(true);
-                syn.forEach((s: SymbolInfo) => symbolMapRef.current.set(s.symbol, s.display_name));
+                syn.forEach((s) => symbolMapRef.current.set(s.symbol, s.display_name));
 
                 for (const s of syn) {
                     tickDataRef.current.set(s.symbol, { digits: [], prices: [] });
@@ -416,7 +428,7 @@ const SmartTrader = observer(() => {
                     <div className='qms-header__icon' />
                     <div>
                         <h1 className='qms-header__title'>QUANTUM MARKET SCANNER</h1>
-                        <p className='qms-header__sub'>Real-time Analysis Across All Volatility Indices</p>
+                        <p className='qms-header__sub'>Real-time Analysis Across 13 Volatility Indices</p>
                     </div>
                 </div>
                 <div className='qms-header__right'>
