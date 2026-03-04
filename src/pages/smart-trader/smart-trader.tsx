@@ -1,25 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import Text from '@/components/shared_ui/text';
-import { localize } from '@deriv-com/translations';
 import { generateDerivApiInstance, V2GetActiveClientId, V2GetActiveToken } from '@/external/bot-skeleton/services/api/appId';
-// import { tradeOptionToBuy } from '@/external/bot-skeleton/services/tradeEngine/utils/helpers';
 import { contract_stages } from '@/constants/contract-stage';
 import { useStore } from '@/hooks/useStore';
 import './smart-trader.scss';
 
-// Minimal trade types we will support initially
 const TRADE_TYPES = [
-    { value: 'DIGITOVER', label: 'Digits Over' },
-    { value: 'DIGITUNDER', label: 'Digits Under' },
-    { value: 'DIGITEVEN', label: 'Even' },
-    { value: 'DIGITODD', label: 'Odd' },
-    { value: 'DIGITMATCH', label: 'Matches' },
-    { value: 'DIGITDIFF', label: 'Differs' },
+    { value: 'DIGITOVER', label: 'Digits Over', icon: '⬆' },
+    { value: 'DIGITUNDER', label: 'Digits Under', icon: '⬇' },
+    { value: 'DIGITEVEN', label: 'Even', icon: '⚡' },
+    { value: 'DIGITODD', label: 'Odd', icon: '🔶' },
+    { value: 'DIGITMATCH', label: 'Matches', icon: '🎯' },
+    { value: 'DIGITDIFF', label: 'Differs', icon: '↔' },
 ];
-// Safe version of tradeOptionToBuy without Blockly dependencies
+
 const tradeOptionToBuy = (contract_type: string, trade_option: any) => {
-    const buy = {
+    const buy: any = {
         buy: '1',
         price: trade_option.amount,
         parameters: {
@@ -48,68 +44,56 @@ const SmartTrader = observer(() => {
     const apiRef = useRef<any>(null);
     const tickStreamIdRef = useRef<string | null>(null);
     const messageHandlerRef = useRef<((evt: MessageEvent) => void) | null>(null);
-
     const lastOutcomeWasLossRef = useRef(false);
 
     const [is_authorized, setIsAuthorized] = useState(false);
     const [account_currency, setAccountCurrency] = useState<string>('USD');
     const [symbols, setSymbols] = useState<Array<{ symbol: string; display_name: string }>>([]);
 
-    // Form state
     const [symbol, setSymbol] = useState<string>('');
     const [tradeType, setTradeType] = useState<string>('DIGITOVER');
     const [ticks, setTicks] = useState<number>(1);
     const [stake, setStake] = useState<number>(0.5);
     const [baseStake, setBaseStake] = useState<number>(0.5);
-    // Predictions
     const [ouPredPreLoss, setOuPredPreLoss] = useState<number>(5);
     const [ouPredPostLoss, setOuPredPostLoss] = useState<number>(5);
-    const [mdPrediction, setMdPrediction] = useState<number>(5); // for match/diff
-    // Martingale/recovery
+    const [mdPrediction, setMdPrediction] = useState<number>(5);
     const [martingaleMultiplier, setMartingaleMultiplier] = useState<number>(1.0);
 
-    // Live digits state
     const [digits, setDigits] = useState<number[]>([]);
     const [lastDigit, setLastDigit] = useState<number | null>(null);
+    const [currentPrice, setCurrentPrice] = useState<string>('');
     const [ticksProcessed, setTicksProcessed] = useState<number>(0);
 
     const [status, setStatus] = useState<string>('');
-    // UI toggles and counters
     const [altEvenOdd, setAltEvenOdd] = useState<boolean>(false);
     const [altOnLoss, setAltOnLoss] = useState<boolean>(false);
     const [consecWins, setConsecWins] = useState<number>(0);
     const [consecLosses, setConsecLosses] = useState<number>(0);
+    const [totalProfit, setTotalProfit] = useState<number>(0);
+    const [tradeCount, setTradeCount] = useState<number>(0);
 
     const [is_running, setIsRunning] = useState(false);
     const stopFlagRef = useRef<boolean>(false);
 
-
     const getHintClass = (d: number) => {
-        if (tradeType === 'DIGITEVEN') return d % 2 === 0 ? 'is-green' : 'is-red';
-        if (tradeType === 'DIGITODD') return d % 2 !== 0 ? 'is-green' : 'is-red';
-        if ((tradeType === 'DIGITOVER' || tradeType === 'DIGITUNDER')) {
+        if (tradeType === 'DIGITEVEN') return d % 2 === 0 ? 'win' : 'lose';
+        if (tradeType === 'DIGITODD') return d % 2 !== 0 ? 'win' : 'lose';
+        if (tradeType === 'DIGITOVER' || tradeType === 'DIGITUNDER') {
             const activePred = lastOutcomeWasLossRef.current ? ouPredPostLoss : ouPredPreLoss;
-            if (tradeType === 'DIGITOVER') {
-                if (d > Number(activePred)) return 'is-green';
-                if (d < Number(activePred)) return 'is-red';
-                return 'is-neutral';
-            }
-            if (tradeType === 'DIGITUNDER') {
-                if (d < Number(activePred)) return 'is-green';
-                if (d > Number(activePred)) return 'is-red';
-                return 'is-neutral';
-            }
+            if (tradeType === 'DIGITOVER') return d > Number(activePred) ? 'win' : d < Number(activePred) ? 'lose' : 'neutral';
+            if (tradeType === 'DIGITUNDER') return d < Number(activePred) ? 'win' : d > Number(activePred) ? 'lose' : 'neutral';
         }
+        if (tradeType === 'DIGITMATCH') return d === mdPrediction ? 'win' : 'lose';
+        if (tradeType === 'DIGITDIFF') return d !== mdPrediction ? 'win' : 'lose';
         return '';
     };
 
     useEffect(() => {
-        // Initialize API connection and fetch active symbols
         const api = generateDerivApiInstance();
         apiRef.current = api;
         const init = async () => {
             try {
-                // Fetch active symbols (volatility indices)
                 const { active_symbols, error: asErr } = await api.send({ active_symbols: 'brief' });
                 if (asErr) throw asErr;
                 const syn = (active_symbols || [])
@@ -119,15 +103,12 @@ const SmartTrader = observer(() => {
                 if (!symbol && syn[0]?.symbol) setSymbol(syn[0].symbol);
                 if (syn[0]?.symbol) startTicks(syn[0].symbol);
             } catch (e: any) {
-                // eslint-disable-next-line no-console
                 console.error('SmartTrader init error', e);
                 setStatus(e?.message || 'Failed to load symbols');
             }
         };
         init();
-
         return () => {
-            // Clean up streams and socket
             try {
                 if (tickStreamIdRef.current) {
                     apiRef.current?.forget({ forget: tickStreamIdRef.current });
@@ -138,9 +119,8 @@ const SmartTrader = observer(() => {
                     messageHandlerRef.current = null;
                 }
                 api?.disconnect?.();
-            } catch { /* noop */ }
+            } catch { /* cleanup */ }
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const authorizeIfNeeded = async () => {
@@ -159,7 +139,6 @@ const SmartTrader = observer(() => {
         const loginid = authorize?.loginid || V2GetActiveClientId();
         setAccountCurrency(authorize?.currency || 'USD');
         try {
-            // Sync Smart Trader auth state into shared ClientStore so Transactions store keys correctly by account
             store?.client?.setLoginId?.(loginid || '');
             store?.client?.setCurrency?.(authorize?.currency || 'USD');
             store?.client?.setIsLoggedIn?.(true);
@@ -184,38 +163,33 @@ const SmartTrader = observer(() => {
         setDigits([]);
         setLastDigit(null);
         setTicksProcessed(0);
+        setCurrentPrice('');
         try {
             const { subscription, error } = await apiRef.current.send({ ticks: sym, subscribe: 1 });
             if (error) throw error;
             if (subscription?.id) tickStreamIdRef.current = subscription.id;
-            // Listen for streaming ticks on the raw websocket
             const onMsg = (evt: MessageEvent) => {
                 try {
                     const data = JSON.parse(evt.data as any);
                     if (data?.msg_type === 'tick' && data?.tick?.symbol === sym) {
-                        const quote = data.tick.quote;
-                        const digit = Number(String(quote).slice(-1));
+                        const quote = String(data.tick.quote);
+                        const digit = Number(quote.slice(-1));
+                        setCurrentPrice(quote);
                         setLastDigit(digit);
-                        setDigits(prev => [...prev.slice(-8), digit]);
+                        setDigits(prev => [...prev.slice(-19), digit]);
                         setTicksProcessed(prev => prev + 1);
                     }
-                    if (data?.forget?.id && data?.forget?.id === tickStreamIdRef.current) {
-                        // stopped
-                    }
-                } catch {}
+                } catch { /* parse error */ }
             };
             messageHandlerRef.current = onMsg;
             apiRef.current?.connection?.addEventListener('message', onMsg);
-
         } catch (e: any) {
-            // eslint-disable-next-line no-console
             console.error('startTicks error', e);
         }
     };
 
     const purchaseOnce = async () => {
         await authorizeIfNeeded();
-
         const trade_option: any = {
             amount: Number(stake),
             basis: 'stake',
@@ -225,13 +199,11 @@ const SmartTrader = observer(() => {
             duration_unit: 't',
             symbol,
         };
-        // Choose prediction based on trade type and last outcome
         if (tradeType === 'DIGITOVER' || tradeType === 'DIGITUNDER') {
             trade_option.prediction = Number(lastOutcomeWasLossRef.current ? ouPredPostLoss : ouPredPreLoss);
         } else if (tradeType === 'DIGITMATCH' || tradeType === 'DIGITDIFF') {
             trade_option.prediction = Number(mdPrediction);
         }
-
         const buy_req = tradeOptionToBuy(tradeType, trade_option);
         const { buy, error } = await apiRef.current.buy(buy_req);
         if (error) throw error;
@@ -244,7 +216,7 @@ const SmartTrader = observer(() => {
         setIsRunning(true);
         stopFlagRef.current = false;
         run_panel.toggleDrawer(true);
-        run_panel.setActiveTabIndex(1); // Transactions tab index in run panel tabs
+        run_panel.setActiveTabIndex(1);
         run_panel.run_id = `smart-${Date.now()}`;
         run_panel.setIsRunning(true);
         run_panel.setContractStage(contract_stages.STARTING);
@@ -254,19 +226,14 @@ const SmartTrader = observer(() => {
             let step = 0;
             baseStake !== stake && setBaseStake(stake);
             while (!stopFlagRef.current) {
-                // Adjust stake and prediction based on prior outcomes (simple martingale)
                 const effectiveStake = step > 0 ? Number((baseStake * Math.pow(martingaleMultiplier, step)).toFixed(2)) : baseStake;
-                // apply effective stake to buy
                 setStake(effectiveStake);
-
                 const isOU = tradeType === 'DIGITOVER' || tradeType === 'DIGITUNDER';
-                if (isOU) {
-                    lastOutcomeWasLossRef.current = lossStreak > 0;
-                }
+                if (isOU) lastOutcomeWasLossRef.current = lossStreak > 0;
 
                 const buy = await purchaseOnce();
+                setTradeCount(prev => prev + 1);
 
-                // Seed an initial transaction row immediately so the UI shows a live row like Bot Builder
                 try {
                     const symbol_display = symbols.find(s => s.symbol === symbol)?.display_name || symbol;
                     transactions.onBotContractEvent({
@@ -282,11 +249,9 @@ const SmartTrader = observer(() => {
                     } as any);
                 } catch {}
 
-                // Reflect stage immediately after successful buy
                 run_panel.setHasOpenContract(true);
                 run_panel.setContractStage(contract_stages.PURCHASE_SENT);
 
-                // subscribe to contract updates for this purchase and push to transactions
                 try {
                     const res = await apiRef.current.send({
                         proposal_open_contract: 1,
@@ -299,19 +264,16 @@ const SmartTrader = observer(() => {
                     let pocSubId: string | null = subscription?.id || null;
                     const targetId = String(buy?.contract_id || '');
 
-                    // Push initial snapshot if present in the first response
                     if (pocInit && String(pocInit?.contract_id || '') === targetId) {
                         transactions.onBotContractEvent(pocInit);
                         run_panel.setHasOpenContract(true);
                     }
 
-                    // Listen for subsequent streaming updates
                     const onMsg = (evt: MessageEvent) => {
                         try {
                             const data = JSON.parse(evt.data as any);
                             if (data?.msg_type === 'proposal_open_contract') {
                                 const poc = data.proposal_open_contract;
-                                // capture subscription id for later forget
                                 if (!pocSubId && data?.subscription?.id) pocSubId = data.subscription.id;
                                 if (String(poc?.contract_id || '') === targetId) {
                                     transactions.onBotContractEvent(poc);
@@ -322,35 +284,34 @@ const SmartTrader = observer(() => {
                                         if (pocSubId) apiRef.current?.forget?.({ forget: pocSubId });
                                         apiRef.current?.connection?.removeEventListener('message', onMsg);
                                         const profit = Number(poc?.profit || 0);
+                                        setTotalProfit(prev => prev + profit);
                                         if (profit > 0) {
                                             lastOutcomeWasLossRef.current = false;
                                             lossStreak = 0;
                                             step = 0;
                                             setStake(baseStake);
+                                            setConsecWins(prev => prev + 1);
+                                            setConsecLosses(0);
                                         } else {
                                             lastOutcomeWasLossRef.current = true;
                                             lossStreak++;
                                             step = Math.min(step + 1, 50);
+                                            setConsecLosses(prev => prev + 1);
+                                            setConsecWins(0);
                                         }
                                     }
                                 }
                             }
-                        } catch {
-                            // noop
-                        }
+                        } catch {}
                     };
                     apiRef.current?.connection?.addEventListener('message', onMsg);
                 } catch (subErr) {
-                    // eslint-disable-next-line no-console
                     console.error('subscribe poc error', subErr);
                 }
 
-                // Wait minimally between purchases: we’ll wait for ticks duration completion by polling poc completion
-                // Simple delay to prevent spamming if API rejects immediate buy loop
                 await new Promise(res => setTimeout(res, 500));
             }
         } catch (e: any) {
-            // eslint-disable-next-line no-console
             console.error('SmartTrader run loop error', e);
             const msg = e?.message || e?.error?.message || 'Something went wrong';
             setStatus(`Error: ${msg}`);
@@ -359,188 +320,237 @@ const SmartTrader = observer(() => {
             run_panel.setIsRunning(false);
             run_panel.setHasOpenContract(false);
             run_panel.setContractStage(contract_stages.NOT_RUNNING);
-
         }
     };
-
 
     const onStop = () => {
         stopFlagRef.current = true;
         setIsRunning(false);
     };
 
+    const selectedTradeType = TRADE_TYPES.find(t => t.value === tradeType);
+    const balance = Number(store?.client?.balance || 0).toFixed(2);
+    const needsPrediction = tradeType === 'DIGITOVER' || tradeType === 'DIGITUNDER';
+    const needsMatchPred = tradeType === 'DIGITMATCH' || tradeType === 'DIGITDIFF';
+
     return (
         <div className='smart-trader'>
-            <div className='smart-trader__container'>
-
-
-                <div className='smart-trader__topbar'>
-                    <div className='smart-trader__title'>
-                        {localize('Trade Every Tick')}
+            <div className='st-header'>
+                <div className='st-header__left'>
+                    <div className='st-header__icon'>⚡</div>
+                    <div>
+                        <h1 className='st-header__title'>Smart Trader</h1>
+                        <p className='st-header__subtitle'>Automated digit trading with strategy</p>
                     </div>
-                    <div className='smart-trader__actions-inline'>
-                        <button type='button' className='smart-trader__chip smart-trader__chip--green'>
-                            {localize('Risk settings')}
-                        </button>
-                        <div className='smart-trader__balance'>
-                            {Number(store?.client?.balance || 0).toFixed(2)}
+                </div>
+                <div className='st-header__right'>
+                    <div className='st-header__balance'>
+                        <span className='st-header__balance-label'>Balance</span>
+                        <span className='st-header__balance-value'>{balance} {account_currency}</span>
+                    </div>
+                    <div className={`st-header__status ${ticksProcessed > 0 ? 'live' : ''}`}>
+                        <span className='st-header__status-dot' />
+                        {ticksProcessed > 0 ? 'Live' : 'Connecting'}
+                    </div>
+                </div>
+            </div>
+
+            <div className='st-body'>
+                <div className='st-sidebar'>
+                    <div className='st-section'>
+                        <div className='st-section__title'>Market</div>
+                        <select
+                            className='st-select'
+                            value={symbol}
+                            onChange={e => { setSymbol(e.target.value); startTicks(e.target.value); }}
+                        >
+                            {symbols.map(s => (
+                                <option key={s.symbol} value={s.symbol}>{s.display_name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className='st-section'>
+                        <div className='st-section__title'>Trade Type</div>
+                        <div className='st-trade-types'>
+                            {TRADE_TYPES.map(t => (
+                                <button
+                                    key={t.value}
+                                    className={`st-trade-type ${tradeType === t.value ? 'active' : ''}`}
+                                    onClick={() => setTradeType(t.value)}
+                                >
+                                    <span className='st-trade-type__icon'>{t.icon}</span>
+                                    <span className='st-trade-type__label'>{t.label}</span>
+                                </button>
+                            ))}
                         </div>
+                    </div>
+
+                    <div className='st-section'>
+                        <div className='st-section__title'>Parameters</div>
+                        <div className='st-params'>
+                            <div className='st-param'>
+                                <label>Duration (Ticks)</label>
+                                <div className='st-param__control'>
+                                    <button onClick={() => setTicks(Math.max(1, ticks - 1))}>-</button>
+                                    <input type='number' min={1} max={10} value={ticks} onChange={e => setTicks(Number(e.target.value))} />
+                                    <button onClick={() => setTicks(Math.min(10, ticks + 1))}>+</button>
+                                </div>
+                            </div>
+                            <div className='st-param'>
+                                <label>Stake ({account_currency})</label>
+                                <div className='st-param__control'>
+                                    <button onClick={() => setStake(Math.max(0.35, +(stake - 0.5).toFixed(2)))}>-</button>
+                                    <input type='number' step='0.01' min={0.35} value={stake} onChange={e => setStake(Number(e.target.value))} />
+                                    <button onClick={() => setStake(+(stake + 0.5).toFixed(2))}>+</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {needsPrediction && (
+                        <div className='st-section'>
+                            <div className='st-section__title'>Prediction Digits</div>
+                            <div className='st-params'>
+                                <div className='st-param'>
+                                    <label>Pre-Loss</label>
+                                    <div className='st-digit-picker'>
+                                        {[0,1,2,3,4,5,6,7,8,9].map(d => (
+                                            <button key={d} className={`st-digit-btn ${ouPredPreLoss === d ? 'active' : ''}`}
+                                                onClick={() => setOuPredPreLoss(d)}>{d}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className='st-param'>
+                                    <label>Post-Loss</label>
+                                    <div className='st-digit-picker'>
+                                        {[0,1,2,3,4,5,6,7,8,9].map(d => (
+                                            <button key={d} className={`st-digit-btn ${ouPredPostLoss === d ? 'active' : ''}`}
+                                                onClick={() => setOuPredPostLoss(d)}>{d}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {needsMatchPred && (
+                        <div className='st-section'>
+                            <div className='st-section__title'>Prediction Digit</div>
+                            <div className='st-digit-picker'>
+                                {[0,1,2,3,4,5,6,7,8,9].map(d => (
+                                    <button key={d} className={`st-digit-btn ${mdPrediction === d ? 'active' : ''}`}
+                                        onClick={() => setMdPrediction(d)}>{d}</button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className='st-section'>
+                        <div className='st-section__title'>Strategy</div>
+                        <div className='st-param'>
+                            <label>Martingale Multiplier</label>
+                            <div className='st-param__control'>
+                                <button onClick={() => setMartingaleMultiplier(Math.max(1, +(martingaleMultiplier - 0.1).toFixed(1)))}>-</button>
+                                <input type='number' min={1} step='0.1' value={martingaleMultiplier}
+                                    onChange={e => setMartingaleMultiplier(Math.max(1, Number(e.target.value)))} />
+                                <button onClick={() => setMartingaleMultiplier(+(martingaleMultiplier + 0.1).toFixed(1))}>+</button>
+                            </div>
+                        </div>
+                        <div className='st-toggles'>
+                            <label className='st-toggle'>
+                                <span>Alternate Even/Odd</span>
+                                <div className={`st-toggle__switch ${altEvenOdd ? 'on' : ''}`}
+                                    onClick={() => setAltEvenOdd(!altEvenOdd)}>
+                                    <div className='st-toggle__knob' />
+                                </div>
+                            </label>
+                            <label className='st-toggle'>
+                                <span>Alternate on Loss</span>
+                                <div className={`st-toggle__switch ${altOnLoss ? 'on' : ''}`}
+                                    onClick={() => setAltOnLoss(!altOnLoss)}>
+                                    <div className='st-toggle__knob' />
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div className='st-actions'>
+                        {!is_running ? (
+                            <>
+                                <button className='st-btn st-btn--trade' onClick={onRun} disabled={!symbol}>
+                                    Trade Once
+                                </button>
+                                <button className='st-btn st-btn--auto' onClick={onRun} disabled={!symbol}>
+                                    Auto Trade
+                                </button>
+                            </>
+                        ) : (
+                            <button className='st-btn st-btn--stop' onClick={onStop}>
+                                Stop Trading
+                            </button>
+                        )}
                     </div>
                 </div>
 
-                <div className='smart-trader__content'>
-                    <div className='smart-trader__card'>
-                        <div className='smart-trader__row smart-trader__row--two'>
-                            <div className='smart-trader__field'>
-                                <label htmlFor='st-symbol'>{localize('Volatility')}</label>
-                                <select
-                                    id='st-symbol'
-                                    value={symbol}
-                                    onChange={e => {
-                                        const v = e.target.value;
-                                        setSymbol(v);
-                                        startTicks(v);
-                                    }}
-                                >
-                                    {symbols.map(s => (
-                                        <option key={s.symbol} value={s.symbol}>
-                                            {s.display_name}
-                                        </option>
-                                    ))}
-                                </select>
-
-                                <div className='smart-trader__row smart-trader__row--two smart-trader__toggles'>
-                                    <div className='smart-trader__toggle'>
-                                        <label>{localize('Alternate Even and Odd')}</label>
-                                        <label className='switch'>
-                                            <input type='checkbox' checked={altEvenOdd} onChange={e => setAltEvenOdd(e.target.checked)} />
-                                            <span className='slider round'></span>
-                                        </label>
-                                    </div>
-                                    <div className='smart-trader__toggle'>
-                                        <label>{localize('Alternate on Loss')}</label>
-                                        <label className='switch'>
-                                            <input type='checkbox' checked={altOnLoss} onChange={e => setAltOnLoss(e.target.checked)} />
-                                            <span className='slider round'></span>
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className='smart-trader__field'>
-                                <label htmlFor='st-tradeType'>{localize('Trade type')}</label>
-                                <select
-                                    id='st-tradeType'
-                                    value={tradeType}
-                                    onChange={e => setTradeType(e.target.value)}
-                                >
-                                    {TRADE_TYPES.map(t => (
-                                        <option key={t.value} value={t.value}>
-                                            {t.label}
-                                        </option>
-                                    ))}
-                                </select>
+                <div className='st-main'>
+                    <div className='st-live-panel'>
+                        <div className='st-live-panel__header'>
+                            <div className='st-live-panel__title'>Live Digit Stream</div>
+                            <div className='st-live-panel__info'>
+                                <span className='st-live-panel__price'>{currentPrice || '---'}</span>
+                                <span className='st-live-panel__ticks'>{ticksProcessed} ticks</span>
                             </div>
                         </div>
-
-                        <div className='smart-trader__row smart-trader__row--compact'>
-                            <div className='smart-trader__field'>
-                                <label htmlFor='st-ticks'>{localize('Ticks')}</label>
-                                <input
-                                    id='st-ticks'
-                                    type='number'
-                                    min={1}
-                                    max={10}
-                                    value={ticks}
-                                    onChange={e => setTicks(Number(e.target.value))}
-                                />
-                            </div>
-                            <div className='smart-trader__field'>
-                                <label htmlFor='st-stake'>{localize('Stake')}</label>
-                                <input
-                                    id='st-stake'
-                                    type='number'
-                                    step='0.01'
-                                    min={0.35}
-                                    value={stake}
-                                    onChange={e => setStake(Number(e.target.value))}
-                                />
-
-                            {/* Strategy controls */}
-                            {tradeType === 'DIGITMATCH' || tradeType === 'DIGITDIFF' ? (
-                                <div className='smart-trader__row smart-trader__row--two'>
-                                    <div className='smart-trader__field'>
-                                        <label htmlFor='st-md-pred'>{localize('Match/Diff prediction digit')}</label>
-                                        <input id='st-md-pred' type='number' min={0} max={9} value={mdPrediction}
-                                            onChange={e => { const v = Math.max(0, Math.min(9, Number(e.target.value))); setMdPrediction(v); }} />
-                                    </div>
-                                    <div className='smart-trader__field'>
-                                        <label htmlFor='st-martingale'>{localize('Martingale multiplier')}</label>
-                                        <input id='st-martingale' type='number' min={1} step='0.1' value={martingaleMultiplier}
-                                            onChange={e => setMartingaleMultiplier(Math.max(1, Number(e.target.value)))} />
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className='smart-trader__row smart-trader__row--compact'>
-                                    <div className='smart-trader__field'>
-                                        <label htmlFor='st-ou-pred-pre'>{localize('Over/Under prediction (pre-loss)')}</label>
-                                        <input id='st-ou-pred-pre' type='number' min={0} max={9} value={ouPredPreLoss}
-                                            onChange={e => setOuPredPreLoss(Math.max(0, Math.min(9, Number(e.target.value))))} />
-                                    </div>
-                                    <div className='smart-trader__field'>
-                                        <label htmlFor='st-ou-pred-post'>{localize('Over/Under prediction (after loss)')}</label>
-                                        <input id='st-ou-pred-post' type='number' min={0} max={9} value={ouPredPostLoss}
-                                            onChange={e => setOuPredPostLoss(Math.max(0, Math.min(9, Number(e.target.value))))} />
-                                    </div>
-                                    <div className='smart-trader__field'>
-                                        <label htmlFor='st-martingale'>{localize('Martingale multiplier')}</label>
-                                        <input id='st-martingale' type='number' min={1} step='0.1' value={martingaleMultiplier}
-                                            onChange={e => setMartingaleMultiplier(Math.max(1, Number(e.target.value)))} />
-                                    </div>
-                                </div>
+                        <div className='st-digit-stream'>
+                            {digits.length === 0 && (
+                                <div className='st-digit-stream__empty'>Waiting for market data...</div>
                             )}
-
-                            </div>
-                        </div>
-
-                        <div className='smart-trader__digits'>
                             {digits.map((d, idx) => (
                                 <div
                                     key={`${idx}-${d}`}
-                                    className={`smart-trader__digit ${d === lastDigit ? 'is-current' : ''} ${getHintClass(d)}`}
+                                    className={`st-digit-cell ${getHintClass(d)} ${idx === digits.length - 1 ? 'latest' : ''}`}
                                 >
                                     {d}
                                 </div>
                             ))}
                         </div>
-                        <div className='smart-trader__footer-bar'>
-                            <div className='smart-trader__footer-item'>
-                                {localize('Total Profit/Loss:')} {Number(store?.summary_card?.profit || 0).toFixed(2)}
-                            </div>
-                            <div className='smart-trader__footer-item'>
-                                {localize('Last Digit:')} {lastDigit ?? '-'}
-                            </div>
-                            <div className='smart-trader__footer-item'>
-                                {localize('Consecutive Wins:')} {consecWins} {localize('Consecutive Losses:')} {consecLosses}
-                            </div>
-                        </div>
-
-                        <div className='smart-trader__cta'>
-                            <button className='smart-trader__cta-once' onClick={() => onRun() } disabled={is_running || !symbol}>
-                                {localize('Trade once')}
-                            </button>
-                            <button className='smart-trader__cta-auto' onClick={onRun} disabled={is_running || !symbol}>
-                                {localize('Start auto trading')}
-                            </button>
-                        </div>
-
-                        {status && (
-                            <div className='smart-trader__status'>
-                                <Text size='xs' color={/error|fail/i.test(status) ? 'loss-danger' : 'prominent'}>
-                                    {status}
-                                </Text>
-                            </div>
-                        )}
                     </div>
+
+                    <div className='st-stats-grid'>
+                        <div className='st-stat-card st-stat-card--profit'>
+                            <div className='st-stat-card__label'>Total P/L</div>
+                            <div className={`st-stat-card__value ${totalProfit >= 0 ? 'positive' : 'negative'}`}>
+                                {totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(2)}
+                            </div>
+                        </div>
+                        <div className='st-stat-card'>
+                            <div className='st-stat-card__label'>Last Digit</div>
+                            <div className='st-stat-card__value highlight'>{lastDigit ?? '-'}</div>
+                        </div>
+                        <div className='st-stat-card'>
+                            <div className='st-stat-card__label'>Win Streak</div>
+                            <div className='st-stat-card__value positive'>{consecWins}</div>
+                        </div>
+                        <div className='st-stat-card'>
+                            <div className='st-stat-card__label'>Loss Streak</div>
+                            <div className='st-stat-card__value negative'>{consecLosses}</div>
+                        </div>
+                        <div className='st-stat-card'>
+                            <div className='st-stat-card__label'>Trades</div>
+                            <div className='st-stat-card__value'>{tradeCount}</div>
+                        </div>
+                        <div className='st-stat-card'>
+                            <div className='st-stat-card__label'>Strategy</div>
+                            <div className='st-stat-card__value small'>{selectedTradeType?.label || '-'}</div>
+                        </div>
+                    </div>
+
+                    {status && (
+                        <div className={`st-status ${/error|fail/i.test(status) ? 'error' : 'info'}`}>
+                            {status}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
