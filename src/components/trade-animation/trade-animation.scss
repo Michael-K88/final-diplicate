@@ -77,13 +77,25 @@
 
     &__run-button {
         width: fit-content;
+        min-width: 80px;
         height: 100% !important;
         border-start-end-radius: 0 !important;
         border-end-end-radius: 0 !important;
-        background-color: var(--purchase-main-1);
+        background-color: #008832 !important;
+        color: #ffffff !important;
+        font-weight: bold !important;
+        font-size: 14px !important;
 
         &:hover {
-            background-color: var(--purchase-main-1) !important;
+            background-color: #006b28 !important;
+        }
+
+        * {
+            color: #ffffff !important;
+        }
+
+        svg, svg > path {
+            fill: #ffffff !important;
         }
     }
 
@@ -230,5 +242,25 @@
 .dc-modal__container_animation__modal {
     @include mobile-or-tablet-screen {
         width: 31.2rem !important;
+    }
+}
+
+.controls__section {
+    position: fixed;
+    bottom: 4rem;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    padding: 0.8rem 1.6rem;
+    background-color: var(--general-main-1);
+    border-top: 1px solid var(--border-normal);
+
+    .controls__buttons {
+        display: flex;
+        width: 100%;
+
+        .controls__animation {
+            width: 100%;
+        }
     }
 }
