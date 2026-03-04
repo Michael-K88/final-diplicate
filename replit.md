@@ -4,6 +4,7 @@
 A React-based trading bot builder application (Deriv Bot) that allows users to create automated trading strategies using a visual block-based editor (Blockly). Built with TypeScript, React 18, and rsbuild as the build tool.
 
 ## Recent Changes
+- 2026-03-04: Enlarged Quantum Market Scanner - 4-column grid (was 6), ~35% larger fonts, bigger digit circles (28px), thicker borders (2px), more padding. Removed Copy Trading tab entirely. Tabs now: Bot Builder(0), Free Bots(1), Smart Trader(2), DTrader(3).
 - 2026-03-04: Quantum Market Scanner redesigned as dark dashboard. All 12 signal types shown in grid (OVER 2, UNDER 7, HIGHER, LOWER, ODD, OVER 3, UNDER 6, EVEN, RISE, FALL, MATCHES, DIFFERS). Each card shows best 2 markets with confidence %, colored entry digit circles, reasoning, and tick duration. LIVE badge with timestamp. Color-coded borders per signal type.
 - 2026-03-04: Removed Pro Tool menu. Replaced Smart Trader with Quantum Market Scanner - real-time signal scanner across all synthetic markets. Analyzes 150-tick history with configurable confidence thresholds.
 - 2026-03-04: Fixed tab bar active state - removed transparent background override so active tab keeps its highlighted background persistently.

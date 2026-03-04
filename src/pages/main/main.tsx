@@ -35,7 +35,6 @@ import './main.scss';
 const TradingView = lazy(() => import('../tradingview'));
 const AnalysisTool = lazy(() => import('../analysis-tool'));
 const Signals = lazy(() => import('../signals'));
-const CopyTrading = lazy(() => import('../copy-trading'));
 const SmartTrader = lazy(() => import('../smart-trader'));
 const Dtrader = lazy(() => import('../dtrader'));
 // Import FreeBots directly instead of lazy loading for faster access
@@ -69,7 +68,7 @@ const AppWrapper = observer(() => {
     const { clear } = summary_card;
     const { BOT_BUILDER } = DBOT_TABS;
     const init_render = React.useRef(true);
-    const hash = ['bot_builder', 'free_bots', 'copy_trading', 'smart_trader', 'dtrader'];
+    const hash = ['bot_builder', 'free_bots', 'smart_trader', 'dtrader'];
     const { isDesktop } = useDevice();
     const location = useLocation();
     const navigate = useNavigate();
@@ -256,27 +255,6 @@ const AppWrapper = observer(() => {
                                 id='id-free-bots'
                             >
                                 <FreeBots />
-                            </div>
-                            <div
-                                label={
-                                    <>
-                                        <LabelPairedSignalCaptionRegularIcon
-                                            height='24px'
-                                            width='24px'
-                                            fill='var(--text-general)'
-                                        />
-                                        <Localize i18n_default_text='Copy Trading' />
-                                    </>
-                                }
-                                id='id-copy-trading'
-                            >
-                                <Suspense
-                                    fallback={
-                                        <ChunkLoader message={localize('Please wait, loading Copy Trading...')} />
-                                    }
-                                >
-                                    <CopyTrading />
-                                </Suspense>
                             </div>
                             <div
                                 label={

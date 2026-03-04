@@ -13,26 +13,26 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.75rem 1.25rem;
+    padding: 1rem 1.5rem;
     background: linear-gradient(135deg, #0d1117, #161b22);
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     flex-shrink: 0;
 
     @media (max-width: 640px) {
         flex-direction: column;
-        gap: 0.4rem;
-        padding: 0.5rem 0.75rem;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem;
     }
 
     &__left {
         display: flex;
         align-items: center;
-        gap: 0.65rem;
+        gap: 0.85rem;
     }
 
     &__icon {
-        width: 36px;
-        height: 36px;
+        width: 44px;
+        height: 44px;
         background: radial-gradient(circle, #10b981 0%, transparent 70%);
         border-radius: 50%;
         opacity: 0.8;
@@ -40,7 +40,7 @@
     }
 
     &__title {
-        font-size: 1rem;
+        font-size: 1.3rem;
         font-weight: 700;
         letter-spacing: 0.12em;
         color: #f1f5f9;
@@ -48,7 +48,7 @@
     }
 
     &__sub {
-        font-size: 0.65rem;
+        font-size: 0.8rem;
         color: #64748b;
         margin: 0;
         letter-spacing: 0.02em;
@@ -57,22 +57,22 @@
     &__right {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
+        gap: 0.85rem;
     }
 
     &__live {
         background: #10b981;
         color: #000;
-        font-size: 0.6rem;
+        font-size: 0.75rem;
         font-weight: 800;
-        padding: 0.2rem 0.6rem;
+        padding: 0.3rem 0.75rem;
         border-radius: 4px;
         letter-spacing: 0.08em;
         animation: qms-blink 2s infinite;
     }
 
     &__time {
-        font-size: 0.7rem;
+        font-size: 0.85rem;
         color: #94a3b8;
         font-weight: 500;
     }
@@ -86,30 +86,29 @@
 .qms-grid {
     flex: 1;
     overflow-y: auto;
-    padding: 0.75rem;
+    padding: 1rem;
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     grid-auto-rows: min-content;
-    gap: 0.6rem;
+    gap: 0.85rem;
     align-content: start;
 
-    @media (max-width: 1400px) { grid-template-columns: repeat(4, 1fr); }
-    @media (max-width: 1000px) { grid-template-columns: repeat(3, 1fr); }
-    @media (max-width: 768px) { grid-template-columns: repeat(2, 1fr); }
-    @media (max-width: 480px) { grid-template-columns: 1fr; }
+    @media (max-width: 1400px) { grid-template-columns: repeat(3, 1fr); }
+    @media (max-width: 1000px) { grid-template-columns: repeat(2, 1fr); }
+    @media (max-width: 600px) { grid-template-columns: 1fr; }
 }
 
 .qms-card {
     background: #111827;
-    border-radius: 10px;
-    border: 1.5px solid;
+    border-radius: 12px;
+    border: 2px solid;
     border-color: var(--card-color, #334155);
     padding: 0;
     overflow: hidden;
     transition: box-shadow 0.2s;
 
     &.active {
-        box-shadow: 0 0 12px -2px var(--card-color, #334155);
+        box-shadow: 0 0 16px -2px var(--card-color, #334155);
     }
 
     &.empty {
@@ -121,34 +120,34 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 0.5rem 0.65rem;
+        padding: 0.7rem 0.85rem;
         border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
 
     &__title {
-        font-size: 0.72rem;
+        font-size: 0.95rem;
         font-weight: 800;
         letter-spacing: 0.08em;
         color: var(--card-color, #e2e8f0);
     }
 
     &__threshold {
-        font-size: 0.58rem;
+        font-size: 0.75rem;
         color: #64748b;
         font-weight: 500;
     }
 
     &__empty {
-        padding: 1.25rem 0.65rem;
+        padding: 1.75rem 0.85rem;
         text-align: center;
-        font-size: 0.65rem;
+        font-size: 0.8rem;
         color: #475569;
         font-style: italic;
     }
 }
 
 .qms-market {
-    padding: 0.55rem 0.65rem;
+    padding: 0.75rem 0.85rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 
     &:last-child { border-bottom: none; }
@@ -156,18 +155,18 @@
     &__head {
         display: flex;
         align-items: center;
-        gap: 0.35rem;
-        margin-bottom: 0.3rem;
+        gap: 0.45rem;
+        margin-bottom: 0.4rem;
     }
 
     &__rank {
-        font-size: 0.55rem;
+        font-size: 0.7rem;
         font-weight: 800;
         color: #64748b;
     }
 
     &__name {
-        font-size: 0.68rem;
+        font-size: 0.85rem;
         font-weight: 600;
         color: #cbd5e1;
         flex: 1;
@@ -177,9 +176,9 @@
     }
 
     &__badge {
-        font-size: 0.58rem;
+        font-size: 0.75rem;
         font-weight: 800;
-        padding: 0.12rem 0.4rem;
+        padding: 0.18rem 0.5rem;
         border-radius: 4px;
         flex-shrink: 0;
 
@@ -192,19 +191,19 @@
     &__conf {
         display: flex;
         align-items: baseline;
-        gap: 0.35rem;
-        margin-bottom: 0.3rem;
+        gap: 0.45rem;
+        margin-bottom: 0.4rem;
     }
 
     &__pct {
-        font-size: 1.4rem;
+        font-size: 1.8rem;
         font-weight: 800;
         color: #f1f5f9;
         line-height: 1;
     }
 
     &__dir {
-        font-size: 1rem;
+        font-size: 1.3rem;
         &.up { color: #10b981; }
         &.down { color: #ef4444; }
         &.neutral { color: #64748b; }
@@ -213,12 +212,12 @@
     &__entry {
         display: flex;
         align-items: center;
-        gap: 0.3rem;
-        margin-bottom: 0.25rem;
+        gap: 0.4rem;
+        margin-bottom: 0.35rem;
     }
 
     &__entry-label {
-        font-size: 0.55rem;
+        font-size: 0.7rem;
         font-weight: 600;
         color: #64748b;
         letter-spacing: 0.04em;
@@ -228,11 +227,11 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 0.3rem;
+        gap: 0.4rem;
     }
 
     &__reason {
-        font-size: 0.58rem;
+        font-size: 0.75rem;
         color: #64748b;
         font-style: italic;
         white-space: nowrap;
@@ -241,10 +240,10 @@
     }
 
     &__ticks {
-        font-size: 0.55rem;
+        font-size: 0.7rem;
         color: #94a3b8;
         background: rgba(255, 255, 255, 0.06);
-        padding: 0.12rem 0.4rem;
+        padding: 0.18rem 0.5rem;
         border-radius: 4px;
         white-space: nowrap;
         flex-shrink: 0;
@@ -252,16 +251,16 @@
 
     &__freqs {
         display: flex;
-        gap: 0.4rem;
-        margin-top: 0.3rem;
+        gap: 0.5rem;
+        margin-top: 0.4rem;
         flex-wrap: wrap;
     }
 
     &__freq {
-        font-size: 0.52rem;
+        font-size: 0.68rem;
         color: #94a3b8;
         background: rgba(255, 255, 255, 0.04);
-        padding: 0.1rem 0.35rem;
+        padding: 0.14rem 0.45rem;
         border-radius: 3px;
     }
 }
@@ -270,10 +269,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
-    font-size: 0.62rem;
+    font-size: 0.78rem;
     font-weight: 800;
 
     &--0 {
