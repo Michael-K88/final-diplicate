@@ -5,29 +5,6 @@
     flex-direction: column;
     overflow: hidden;
 
-    &__header {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-        padding: 0.6rem 1rem;
-        background: linear-gradient(135deg, #003366, #004d99);
-        color: #ffffff;
-        position: relative;
-        z-index: 5;
-        flex-shrink: 0;
-    }
-
-    &__header-icon {
-        font-size: 1.1rem;
-    }
-
-    &__header-title {
-        font-size: 1rem;
-        font-weight: 700;
-        letter-spacing: 0.03em;
-    }
-
     &__frame-wrap {
         flex: 1;
         position: relative;

@@ -4,6 +4,7 @@
 A React-based trading bot builder application (Deriv Bot) that allows users to create automated trading strategies using a visual block-based editor (Blockly). Built with TypeScript, React 18, and rsbuild as the build tool.
 
 ## Recent Changes
+- 2026-03-04: Reverted Analysis Tool header back to original Binarytool (removed custom "Blue Traders Analysis Tool" header). Fixed tab bar font color - all tab items now use white (#ffffff) text always, including after clicking/active state. Previously active tabs used var(--text-prominent) which turned black in light mode.
 - 2026-03-04: Fixed Quantum Market Scanner overlap with Summary/Transactions/Journal panel. Scanner width now dynamically adjusts based on drawer state (calc(100% - 36.6rem) when open, 100% when closed). Enhanced vertical scrollbar with blue gradient thumb (10px wide). Adjusted grid breakpoints for drawer-open state.
 - 2026-03-04: Quantum Market Scanner now uses only 13 specific volatility indices (Vol 10/10(1s)/15(1s)/25/25(1s)/30(1s)/50/50(1s)/75/75(1s)/90(1s)/100/100(1s)) instead of all synthetic markets. Added visible vertical scrollbar. Fixed layout to fit window without overwrapping.
 - 2026-03-04: Enlarged Quantum Market Scanner - 4-column grid (was 6), ~35% larger fonts, bigger digit circles (28px), thicker borders (2px), more padding. Removed Copy Trading tab entirely. Tabs now: Bot Builder(0), Free Bots(1), Smart Trader(2), DTrader(3).
