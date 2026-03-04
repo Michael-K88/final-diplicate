@@ -284,7 +284,8 @@ function analyzeSignals(digits: number[], prices: number[]): Signal[] {
 }
 
 const SmartTrader = observer(() => {
-    useStore();
+    const { run_panel } = useStore();
+    const { is_drawer_open } = run_panel;
     const apiRef = useRef<any>(null);
     const tickStreamsRef = useRef<Map<string, string>>(new Map());
     const mainListenerRef = useRef<((evt: MessageEvent) => void) | null>(null);
@@ -422,7 +423,7 @@ const SmartTrader = observer(() => {
     };
 
     return (
-        <div className='qms'>
+        <div className={`qms${is_drawer_open ? ' qms--drawer-open' : ''}`}>
             <div className='qms-header'>
                 <div className='qms-header__left'>
                     <div className='qms-header__icon' />
