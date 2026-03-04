@@ -70,6 +70,18 @@ const AppWrapper = observer(() => {
     const init_render = React.useRef(true);
     const hash = ['bot_builder', 'free_bots', 'smart_trader', 'dtrader'];
     const { isDesktop } = useDevice();
+    const [visitedIframeTabs, setVisitedIframeTabs] = React.useState<Set<number>>(new Set());
+
+    React.useEffect(() => {
+        if (active_tab >= 3 && active_tab <= 6) {
+            setVisitedIframeTabs(prev => {
+                if (prev.has(active_tab)) return prev;
+                const next = new Set(prev);
+                next.add(active_tab);
+                return next;
+            });
+        }
+    }, [active_tab]);
     const location = useLocation();
     const navigate = useNavigate();
     // Removed tab shadow states to fix mobile edge fading issue
@@ -287,13 +299,7 @@ const AppWrapper = observer(() => {
                                     </>
                                 }
                                 id='id-dtrader'
-                            >
-                                <Suspense
-                                    fallback={<ChunkLoader message={localize('Please wait, loading DTrader...')} />}
-                                >
-                                    <Dtrader />
-                                </Suspense>
-                            </div>
+                            />
                             <div
                                 label={
                                     <>
@@ -302,13 +308,7 @@ const AppWrapper = observer(() => {
                                     </>
                                 }
                                 id='id-tradingview'
-                            >
-                                <Suspense
-                                    fallback={<ChunkLoader message={localize('Please wait, loading TradingView...')} />}
-                                >
-                                    <TradingView />
-                                </Suspense>
-                            </div>
+                            />
                             <div
                                 label={
                                     <>
@@ -317,15 +317,7 @@ const AppWrapper = observer(() => {
                                     </>
                                 }
                                 id='id-analysis-tool'
-                            >
-                                <Suspense
-                                    fallback={
-                                        <ChunkLoader message={localize('Please wait, loading Analysis Tool...')} />
-                                    }
-                                >
-                                    <AnalysisTool />
-                                </Suspense>
-                            </div>
+                            />
                             <div
                                 label={
                                     <>
@@ -338,14 +330,38 @@ const AppWrapper = observer(() => {
                                     </>
                                 }
                                 id='id-signals'
-                            >
-                                <Suspense
-                                    fallback={<ChunkLoader message={localize('Please wait, loading Signals...')} />}
-                                >
+                            />
+                        </Tabs>
+                    </div>
+                    <div className='main__iframe-tabs' style={{ display: active_tab >= 3 && active_tab <= 6 ? 'block' : 'none' }}>
+                        {visitedIframeTabs.has(3) && (
+                            <div className='main__iframe-panel' style={{ display: active_tab === 3 ? 'flex' : 'none' }}>
+                                <Suspense fallback={<ChunkLoader message={localize('Please wait, loading DTrader...')} />}>
+                                    <Dtrader />
+                                </Suspense>
+                            </div>
+                        )}
+                        {visitedIframeTabs.has(4) && (
+                            <div className='main__iframe-panel' style={{ display: active_tab === 4 ? 'flex' : 'none' }}>
+                                <Suspense fallback={<ChunkLoader message={localize('Please wait, loading TradingView...')} />}>
+                                    <TradingView />
+                                </Suspense>
+                            </div>
+                        )}
+                        {visitedIframeTabs.has(5) && (
+                            <div className='main__iframe-panel' style={{ display: active_tab === 5 ? 'flex' : 'none' }}>
+                                <Suspense fallback={<ChunkLoader message={localize('Please wait, loading Analysis Tool...')} />}>
+                                    <AnalysisTool />
+                                </Suspense>
+                            </div>
+                        )}
+                        {visitedIframeTabs.has(6) && (
+                            <div className='main__iframe-panel' style={{ display: active_tab === 6 ? 'flex' : 'none' }}>
+                                <Suspense fallback={<ChunkLoader message={localize('Please wait, loading Signals...')} />}>
                                     <Signals />
                                 </Suspense>
                             </div>
-                        </Tabs>
+                        )}
                     </div>
                 </div>
             </div>

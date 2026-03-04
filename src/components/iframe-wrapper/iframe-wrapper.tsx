@@ -16,7 +16,6 @@ const IframeWrapper: React.FC<IframeWrapperProps> = ({ src, title, className = '
                 className='iframe-wrapper__frame'
                 frameBorder='0'
                 allowFullScreen
-                loading='lazy'
             />
         </div>
     );
