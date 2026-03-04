@@ -1,169 +1,108 @@
 .free-bots {
     width: 100%;
-    height: 100vh;
-    padding: 20px 20px 100px 20px; // Added bottom padding for scrolling
+    height: 100%;
+    padding: 12px 16px 80px 16px;
     background: var(--general-main-1);
     overflow-y: auto;
     overflow-x: hidden;
     box-sizing: border-box;
-    -webkit-overflow-scrolling: touch; // Smooth scrolling on iOS
-    scroll-behavior: smooth; // Smooth scrolling behavior
+    -webkit-overflow-scrolling: touch;
 
     &__container {
-        max-width: 1200px;
+        max-width: 1400px;
         margin: 0 auto;
-        padding-bottom: 60px; // Extra bottom padding
     }
 
-
-
-    &__loading {
+    &__loading,
+    &__empty {
         text-align: center;
         padding: 60px 20px;
     }
 
     &__grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-        gap: 24px;
-        padding-bottom: 60px; // Increased bottom padding
-        margin-bottom: 40px; // Added margin for better scrolling
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 14px;
+        padding-bottom: 40px;
 
         @media (max-width: 768px) {
-            grid-template-columns: 1fr;
-            gap: 16px;
-            padding: 0 10px 80px 10px; // Increased bottom padding for mobile
-            margin-bottom: 60px; // Added margin for mobile
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
         }
-    }
 
-    &__loading,
-    &__empty {
-        text-align: center;
-        padding: 60px 20px 100px 20px; // Added bottom padding
-        margin-bottom: 40px;
+        @media (max-width: 480px) {
+            grid-template-columns: 1fr;
+        }
     }
 }
 
 .free-bot-card {
     background: var(--general-main-1);
     border: 1px solid var(--border-normal);
-    border-radius: 12px;
-    padding: 20px;
+    border-radius: 8px;
+    padding: 14px 14px 12px;
     display: flex;
     flex-direction: column;
-    min-height: 280px;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    animation: fade-in-up 0.6s ease-out;
-    animation-fill-mode: both;
-
-    &:nth-child(1) { animation-delay: 0.1s; }
-    &:nth-child(2) { animation-delay: 0.2s; }
-    &:nth-child(3) { animation-delay: 0.3s; }
-    &:nth-child(4) { animation-delay: 0.4s; }
-    &:nth-child(5) { animation-delay: 0.5s; }
-    &:nth-child(6) { animation-delay: 0.6s; }
-    &:nth-child(7) { animation-delay: 0.7s; }
-    &:nth-child(8) { animation-delay: 0.8s; }
+    align-items: center;
+    text-align: center;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    position: relative;
 
     &:hover {
         transform: translateY(-2px);
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
         border-color: #003366;
     }
 
-    &__header {
-        margin-bottom: 12px;
+    &__number {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #003366;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 10px;
+        flex-shrink: 0;
     }
 
     &__title {
-        margin-bottom: 8px;
+        font-size: 13px;
+        font-weight: 700;
         line-height: 1.3;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    &__badges {
+        margin-bottom: 6px;
+        min-height: 34px;
         display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        word-break: break-word;
     }
 
-    &__badge {
-        padding: 4px 8px;
-        border-radius: 4px;
+    &__subtitle {
         font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-
-        &--beginner {
-            background: #e8f5e8;
-            color: #2e7d32;
-        }
-
-        &--intermediate {
-            background: #e0e8f0;
-            color: #003366;
-        }
-
-        &--advanced {
-            background: #ffebee;
-            color: #d32f2f;
-        }
-
-        &--strategy {
-            background: var(--general-section-1);
-            color: var(--text-general);
-        }
-    }
-
-    &__description {
-        margin-bottom: 16px;
-        line-height: 1.5;
-        flex-grow: 1;
-        display: -webkit-box;
-        -webkit-line-clamp: 3;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    &__features {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-bottom: 16px;
-    }
-
-    &__feature {
-        padding: 2px 6px;
-        background: var(--general-section-1);
-        border-radius: 3px;
-        font-size: 10px;
         color: var(--text-less-prominent);
-        border: 1px solid var(--border-normal);
+        margin-bottom: 12px;
+        line-height: 1.3;
     }
 
     &__load-btn {
-        margin-top: auto;
         width: 100%;
-        padding: 10px;
-        border-radius: 6px;
+        margin-top: auto;
+        padding: 8px 12px;
+        border-radius: 5px;
+        font-size: 12px;
         font-weight: 600;
-        transition: all 0.3s ease;
         background: #003366 !important;
-        color: #FFFFFF !important;
+        color: #fff !important;
         border: none !important;
+        transition: background 0.2s;
 
         &:hover:not(:disabled) {
-            transform: translateY(-1px);
             background: #002244 !important;
-            color: #FFFFFF !important;
         }
 
         &:disabled {
@@ -171,124 +110,51 @@
             color: #666 !important;
             cursor: not-allowed;
             opacity: 0.6;
-            transform: none;
-        }
-    }
-
-    // Skeleton loading animation for cards without XML
-    &.loading {
-        .free-bot-card__title,
-        .free-bot-card__description {
-            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-            background-size: 200% 100%;
-            animation: skeleton-loading 1.5s infinite;
-            border-radius: 4px;
-            color: transparent;
         }
     }
 }
 
-// Dark theme adjustments
 [data-theme='dark'] {
-    .free-bots {
-        background: var(--general-main-2);
-    }
-
     .free-bot-card {
         background: var(--general-main-2);
         border-color: var(--border-normal);
 
         &:hover {
-            border-color: #003366;
+            border-color: #336699;
         }
 
-        &__badge {
-            &--beginner {
-                background: rgba(0, 51, 102, 0.2);
-                color: #336699;
-            }
-
-            &--intermediate {
-                background: rgba(0, 64, 128, 0.2);
-                color: #4d88b8;
-            }
-
-            &--advanced {
-                background: rgba(211, 47, 47, 0.2);
-                color: #e57373;
-            }
+        &__number {
+            background: #336699;
         }
     }
 }
 
-// Mobile optimizations
 @media (max-width: 768px) {
     .free-bots {
-        padding: 16px 12px 120px 12px; // Increased bottom padding for mobile scrolling
-        height: calc(100vh - 60px); // Account for mobile navigation
-
-        &__container {
-            padding-bottom: 80px; // Extra bottom padding for mobile
-        }
-
-
-
-        &__grid {
-            gap: 16px;
-            padding-bottom: 100px; // Increased bottom padding
-            margin-bottom: 80px; // Added margin for better scrolling
-        }
-
-        &__loading,
-        &__empty {
-            padding: 40px 16px 120px 16px; // Increased bottom padding
-            margin-bottom: 60px;
-        }
+        padding: 10px 10px 100px 10px;
     }
 
     .free-bot-card {
-        padding: 16px;
-        min-height: 260px;
-        margin-bottom: 16px; // Added margin between cards
+        padding: 12px 10px 10px;
 
-        &__title {
-            font-size: 14px;
-        }
-
-        &__description {
+        &__number {
+            width: 28px;
+            height: 28px;
             font-size: 12px;
         }
 
-        &__feature {
-            font-size: 9px;
-            padding: 2px 4px;
+        &__title {
+            font-size: 12px;
+            min-height: 30px;
+        }
+
+        &__subtitle {
+            font-size: 10px;
         }
 
         &__load-btn {
-            padding: 8px;
-            font-size: 13px;
+            padding: 7px 10px;
+            font-size: 11px;
         }
-    }
-}
-
-// Animation for cards
-@keyframes fade-in-up {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-// Skeleton loading animation
-@keyframes skeleton-loading {
-    0% {
-        background-position: -200% 0;
-    }
-    100% {
-        background-position: 200% 0;
     }
 }

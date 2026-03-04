@@ -196,39 +196,16 @@ const FreeBots = observer(() => {
                     <div className='free-bots__grid'>
                         {availableBots.map((bot, index) => (
                             <div key={index} className='free-bot-card'>
-                                <div className='free-bot-card__header'>
-                                    <Text size='s' weight='bold' className='free-bot-card__title'>
-                                        {bot.name}
-                                    </Text>
-                                    <div className='free-bot-card__badges'>
-                                        <span className='free-bot-card__badge free-bot-card__badge--difficulty'>
-                                            {bot.difficulty}
-                                        </span>
-                                        <span className='free-bot-card__badge free-bot-card__badge--strategy'>
-                                            {bot.strategy}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <Text size='xs' color='general' className='free-bot-card__description'>
-                                    {bot.description}
-                                </Text>
-
-                                <div className='free-bot-card__features'>
-                                    {bot.features.map((feature, featureIndex) => (
-                                        <span key={featureIndex} className='free-bot-card__feature'>
-                                            {feature}
-                                        </span>
-                                    ))}
-                                </div>
-
+                                <div className='free-bot-card__number'>#{index + 1}</div>
+                                <div className='free-bot-card__title'>{bot.name}</div>
+                                <div className='free-bot-card__subtitle'>Free and customizable bots</div>
                                 <Button
                                     className='free-bot-card__load-btn'
                                     onClick={() => loadBotIntoBuilder(bot)}
                                     primary
                                     has_effect
                                     type='button'
-                                    disabled={!bot.xml} // Disable if XML not loaded yet
+                                    disabled={!bot.xml}
                                 >
                                     {bot.xml ? localize('Load Bot') : localize('Loading...')}
                                 </Button>
