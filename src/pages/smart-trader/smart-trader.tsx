@@ -1,555 +1,420 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
-import { generateDerivApiInstance, V2GetActiveClientId, V2GetActiveToken } from '@/external/bot-skeleton/services/api/appId';
-import { contract_stages } from '@/constants/contract-stage';
+import { generateDerivApiInstance } from '@/external/bot-skeleton/services/api/appId';
 import { useStore } from '@/hooks/useStore';
 import './smart-trader.scss';
 
-const TRADE_TYPES = [
-    { value: 'DIGITOVER', label: 'Digits Over', icon: '⬆' },
-    { value: 'DIGITUNDER', label: 'Digits Under', icon: '⬇' },
-    { value: 'DIGITEVEN', label: 'Even', icon: '⚡' },
-    { value: 'DIGITODD', label: 'Odd', icon: '🔶' },
-    { value: 'DIGITMATCH', label: 'Matches', icon: '🎯' },
-    { value: 'DIGITDIFF', label: 'Differs', icon: '↔' },
+interface SymbolInfo {
+    symbol: string;
+    display_name: string;
+}
+
+interface Signal {
+    type: string;
+    label: string;
+    confidence: number;
+    direction: 'up' | 'down' | 'neutral';
+    detail: string;
+}
+
+interface SymbolSignals {
+    symbol: string;
+    display_name: string;
+    signals: Signal[];
+    lastPrice: string;
+    lastDigit: number | null;
+    tickCount: number;
+}
+
+const TICK_HISTORY_SIZE = 150;
+
+const SIGNAL_CATEGORIES = [
+    { id: 'overunder', label: 'Over / Under', icon: '⬆⬇' },
+    { id: 'evenodd', label: 'Even / Odd', icon: '⚡' },
+    { id: 'risefall', label: 'Rise / Fall', icon: '📈' },
+    { id: 'higherlower', label: 'Higher / Lower', icon: '🔺🔻' },
+    { id: 'matches', label: 'Matches', icon: '🎯' },
+    { id: 'differs', label: 'Differs', icon: '↔' },
 ];
 
-const tradeOptionToBuy = (contract_type: string, trade_option: any) => {
-    const buy: any = {
-        buy: '1',
-        price: trade_option.amount,
-        parameters: {
-            amount: trade_option.amount,
-            basis: trade_option.basis,
-            contract_type,
-            currency: trade_option.currency,
-            duration: trade_option.duration,
-            duration_unit: trade_option.duration_unit,
-            symbol: trade_option.symbol,
-        },
-    };
-    if (trade_option.prediction !== undefined) {
-        buy.parameters.selected_tick = trade_option.prediction;
+function analyzeSignals(digits: number[], prices: number[]): Signal[] {
+    const signals: Signal[] = [];
+    if (digits.length < 20) return signals;
+
+    const total = digits.length;
+    const counts = new Array(10).fill(0);
+    digits.forEach(d => counts[d]++);
+
+    const overCount = (threshold: number) => digits.filter(d => d > threshold).length;
+    const underCount = (threshold: number) => digits.filter(d => d < threshold).length;
+
+    const over2Pct = (overCount(2) / total) * 100;
+    if (over2Pct >= 75) {
+        signals.push({ type: 'overunder', label: 'Over 2', confidence: Math.round(over2Pct), direction: 'up', detail: `${overCount(2)}/${total} ticks > 2` });
     }
-    if (!['TICKLOW', 'TICKHIGH'].includes(contract_type) && trade_option.prediction !== undefined) {
-        buy.parameters.barrier = trade_option.prediction;
+
+    const under7Pct = (underCount(7) / total) * 100;
+    if (under7Pct >= 75) {
+        signals.push({ type: 'overunder', label: 'Under 7', confidence: Math.round(under7Pct), direction: 'down', detail: `${underCount(7)}/${total} ticks < 7` });
     }
-    return buy;
-};
+
+    const over3Pct = (overCount(3) / total) * 100;
+    if (over3Pct >= 65) {
+        signals.push({ type: 'overunder', label: 'Over 3', confidence: Math.round(over3Pct), direction: 'up', detail: `${overCount(3)}/${total} ticks > 3` });
+    }
+
+    const under6Pct = (underCount(6) / total) * 100;
+    if (under6Pct >= 65) {
+        signals.push({ type: 'overunder', label: 'Under 6', confidence: Math.round(under6Pct), direction: 'down', detail: `${underCount(6)}/${total} ticks < 6` });
+    }
+
+    const evenCount = digits.filter(d => d % 2 === 0).length;
+    const evenPct = (evenCount / total) * 100;
+    const oddPct = 100 - evenPct;
+    if (evenPct >= 57) {
+        signals.push({ type: 'evenodd', label: 'Even', confidence: Math.round(evenPct), direction: 'up', detail: `${evenCount}/${total} even digits` });
+    }
+    if (oddPct >= 57) {
+        signals.push({ type: 'evenodd', label: 'Odd', confidence: Math.round(oddPct), direction: 'up', detail: `${total - evenCount}/${total} odd digits` });
+    }
+
+    if (prices.length >= 20) {
+        let rises = 0;
+        let falls = 0;
+        for (let i = 1; i < prices.length; i++) {
+            if (prices[i] > prices[i - 1]) rises++;
+            else if (prices[i] < prices[i - 1]) falls++;
+        }
+        const moves = prices.length - 1;
+        const risePct = (rises / moves) * 100;
+        const fallPct = (falls / moves) * 100;
+        if (risePct >= 57) {
+            signals.push({ type: 'risefall', label: 'Rise', confidence: Math.round(risePct), direction: 'up', detail: `${rises}/${moves} price rises` });
+        }
+        if (fallPct >= 57) {
+            signals.push({ type: 'risefall', label: 'Fall', confidence: Math.round(fallPct), direction: 'down', detail: `${falls}/${moves} price falls` });
+        }
+
+        let higher = 0;
+        let lower = 0;
+        const midIdx = Math.floor(prices.length / 2);
+        const recentPrices = prices.slice(midIdx);
+        const refPrice = prices[midIdx];
+        recentPrices.forEach(p => {
+            if (p > refPrice) higher++;
+            else if (p < refPrice) lower++;
+        });
+        const hlTotal = recentPrices.length;
+        const higherPct = (higher / hlTotal) * 100;
+        const lowerPct = (lower / hlTotal) * 100;
+        if (higherPct >= 57) {
+            signals.push({ type: 'higherlower', label: 'Higher', confidence: Math.round(higherPct), direction: 'up', detail: `${higher}/${hlTotal} prices higher than mid` });
+        }
+        if (lowerPct >= 57) {
+            signals.push({ type: 'higherlower', label: 'Lower', confidence: Math.round(lowerPct), direction: 'down', detail: `${lower}/${hlTotal} prices lower than mid` });
+        }
+    }
+
+    const recentWindow = digits.slice(-50);
+    const recentCounts = new Array(10).fill(0);
+    recentWindow.forEach(d => recentCounts[d]++);
+
+    const matchDigits: { digit: number; pct: number }[] = [];
+    const differDigits: { digit: number; pct: number }[] = [];
+    for (let d = 0; d < 10; d++) {
+        const freq = (counts[d] / total) * 100;
+        const recentFreq = recentWindow.length > 0 ? (recentCounts[d] / recentWindow.length) * 100 : 0;
+        const avgFreq = (freq + recentFreq) / 2;
+        if (avgFreq >= 12) {
+            matchDigits.push({ digit: d, pct: Math.round(avgFreq) });
+        }
+        if (avgFreq <= 7) {
+            differDigits.push({ digit: d, pct: Math.round(100 - avgFreq) });
+        }
+    }
+
+    matchDigits.sort((a, b) => b.pct - a.pct);
+    matchDigits.slice(0, 2).forEach(m => {
+        signals.push({ type: 'matches', label: `Match ${m.digit}`, confidence: Math.min(95, Math.round(m.pct * 3.5)), direction: 'up', detail: `Digit ${m.digit} appears ${m.pct}% of ticks` });
+    });
+
+    differDigits.sort((a, b) => b.pct - a.pct);
+    differDigits.slice(0, 2).forEach(d => {
+        signals.push({ type: 'differs', label: `Differ ${d.digit}`, confidence: Math.min(95, Math.round(d.pct * 1.1)), direction: 'down', detail: `Digit ${d.digit} appears rarely (${100 - d.pct}%)` });
+    });
+
+    return signals;
+}
 
 const SmartTrader = observer(() => {
-    const store = useStore();
-    const { run_panel, transactions } = store;
-
+    useStore();
     const apiRef = useRef<any>(null);
-    const tickStreamIdRef = useRef<string | null>(null);
-    const messageHandlerRef = useRef<((evt: MessageEvent) => void) | null>(null);
-    const lastOutcomeWasLossRef = useRef(false);
+    const tickStreamsRef = useRef<Map<string, string>>(new Map());
+    const listenersRef = useRef<Map<string, (evt: MessageEvent) => void>>(new Map());
+    const tickDataRef = useRef<Map<string, { digits: number[]; prices: number[] }>>(new Map());
 
-    const [is_authorized, setIsAuthorized] = useState(false);
-    const [account_currency, setAccountCurrency] = useState<string>('USD');
-    const [symbols, setSymbols] = useState<Array<{ symbol: string; display_name: string }>>([]);
+    const [symbols, setSymbols] = useState<SymbolInfo[]>([]);
+    const [symbolSignals, setSymbolSignals] = useState<Map<string, SymbolSignals>>(new Map());
+    const [activeCategory, setActiveCategory] = useState('overunder');
+    const [isConnected, setIsConnected] = useState(false);
+    const [totalTicks, setTotalTicks] = useState(0);
 
-    const [symbol, setSymbol] = useState<string>('');
-    const [tradeType, setTradeType] = useState<string>('DIGITOVER');
-    const [ticks, setTicks] = useState<number>(1);
-    const [stake, setStake] = useState<number>(0.5);
-    const [baseStake, setBaseStake] = useState<number>(0.5);
-    const [ouPredPreLoss, setOuPredPreLoss] = useState<number>(5);
-    const [ouPredPostLoss, setOuPredPostLoss] = useState<number>(5);
-    const [mdPrediction, setMdPrediction] = useState<number>(5);
-    const [martingaleMultiplier, setMartingaleMultiplier] = useState<number>(1.0);
+    const updateSignalsForSymbol = useCallback((sym: string, displayName: string) => {
+        const data = tickDataRef.current.get(sym);
+        if (!data || data.digits.length < 10) return;
 
-    const [digits, setDigits] = useState<number[]>([]);
-    const [lastDigit, setLastDigit] = useState<number | null>(null);
-    const [currentPrice, setCurrentPrice] = useState<string>('');
-    const [ticksProcessed, setTicksProcessed] = useState<number>(0);
+        const signals = analyzeSignals(data.digits, data.prices);
+        const lastPrice = data.prices.length > 0 ? String(data.prices[data.prices.length - 1]) : '---';
+        const lastDigit = data.digits.length > 0 ? data.digits[data.digits.length - 1] : null;
 
-    const [status, setStatus] = useState<string>('');
-    const [altEvenOdd, setAltEvenOdd] = useState<boolean>(false);
-    const [altOnLoss, setAltOnLoss] = useState<boolean>(false);
-    const [consecWins, setConsecWins] = useState<number>(0);
-    const [consecLosses, setConsecLosses] = useState<number>(0);
-    const [totalProfit, setTotalProfit] = useState<number>(0);
-    const [tradeCount, setTradeCount] = useState<number>(0);
-
-    const [is_running, setIsRunning] = useState(false);
-    const stopFlagRef = useRef<boolean>(false);
-
-    const getHintClass = (d: number) => {
-        if (tradeType === 'DIGITEVEN') return d % 2 === 0 ? 'win' : 'lose';
-        if (tradeType === 'DIGITODD') return d % 2 !== 0 ? 'win' : 'lose';
-        if (tradeType === 'DIGITOVER' || tradeType === 'DIGITUNDER') {
-            const activePred = lastOutcomeWasLossRef.current ? ouPredPostLoss : ouPredPreLoss;
-            if (tradeType === 'DIGITOVER') return d > Number(activePred) ? 'win' : d < Number(activePred) ? 'lose' : 'neutral';
-            if (tradeType === 'DIGITUNDER') return d < Number(activePred) ? 'win' : d > Number(activePred) ? 'lose' : 'neutral';
-        }
-        if (tradeType === 'DIGITMATCH') return d === mdPrediction ? 'win' : 'lose';
-        if (tradeType === 'DIGITDIFF') return d !== mdPrediction ? 'win' : 'lose';
-        return '';
-    };
+        setSymbolSignals(prev => {
+            const next = new Map(prev);
+            next.set(sym, {
+                symbol: sym,
+                display_name: displayName,
+                signals,
+                lastPrice,
+                lastDigit,
+                tickCount: data.digits.length,
+            });
+            return next;
+        });
+    }, []);
 
     useEffect(() => {
         const api = generateDerivApiInstance();
         apiRef.current = api;
+
         const init = async () => {
             try {
-                const { active_symbols, error: asErr } = await api.send({ active_symbols: 'brief' });
-                if (asErr) throw asErr;
+                const { active_symbols, error } = await api.send({ active_symbols: 'brief' });
+                if (error) throw error;
                 const syn = (active_symbols || [])
                     .filter((s: any) => /synthetic/i.test(s.market) || /^R_/.test(s.symbol))
                     .map((s: any) => ({ symbol: s.symbol, display_name: s.display_name }));
                 setSymbols(syn);
-                if (!symbol && syn[0]?.symbol) setSymbol(syn[0].symbol);
-                if (syn[0]?.symbol) startTicks(syn[0].symbol);
-            } catch (e: any) {
-                console.error('SmartTrader init error', e);
-                setStatus(e?.message || 'Failed to load symbols');
-            }
-        };
-        init();
-        return () => {
-            try {
-                if (tickStreamIdRef.current) {
-                    apiRef.current?.forget({ forget: tickStreamIdRef.current });
-                    tickStreamIdRef.current = null;
-                }
-                if (messageHandlerRef.current) {
-                    apiRef.current?.connection?.removeEventListener('message', messageHandlerRef.current);
-                    messageHandlerRef.current = null;
-                }
-                api?.disconnect?.();
-            } catch { /* cleanup */ }
-        };
-    }, []);
+                setIsConnected(true);
 
-    const authorizeIfNeeded = async () => {
-        if (is_authorized) return;
-        const token = V2GetActiveToken();
-        if (!token) {
-            setStatus('No token found. Please log in and select an account.');
-            throw new Error('No token');
-        }
-        const { authorize, error } = await apiRef.current.authorize(token);
-        if (error) {
-            setStatus(`Authorization error: ${error.message || error.code}`);
-            throw error;
-        }
-        setIsAuthorized(true);
-        const loginid = authorize?.loginid || V2GetActiveClientId();
-        setAccountCurrency(authorize?.currency || 'USD');
-        try {
-            store?.client?.setLoginId?.(loginid || '');
-            store?.client?.setCurrency?.(authorize?.currency || 'USD');
-            store?.client?.setIsLoggedIn?.(true);
-        } catch {}
-    };
+                for (const s of syn) {
+                    tickDataRef.current.set(s.symbol, { digits: [], prices: [] });
+                    try {
+                        const histRes = await api.send({
+                            ticks_history: s.symbol,
+                            count: TICK_HISTORY_SIZE,
+                            end: 'latest',
+                            style: 'ticks',
+                        });
+                        if (histRes?.history?.prices) {
+                            const histPrices = histRes.history.prices.map(Number);
+                            const histDigits = histPrices.map((p: number) => Number(String(p).slice(-1)));
+                            tickDataRef.current.set(s.symbol, { digits: histDigits, prices: histPrices });
+                            updateSignalsForSymbol(s.symbol, s.display_name);
+                        }
+                    } catch (histErr) { console.warn('History fetch failed for', s.symbol, histErr); }
 
-    const stopTicks = () => {
-        try {
-            if (tickStreamIdRef.current) {
-                apiRef.current?.forget({ forget: tickStreamIdRef.current });
-                tickStreamIdRef.current = null;
-            }
-            if (messageHandlerRef.current) {
-                apiRef.current?.connection?.removeEventListener('message', messageHandlerRef.current);
-                messageHandlerRef.current = null;
-            }
-        } catch {}
-    };
-
-    const startTicks = async (sym: string) => {
-        stopTicks();
-        setDigits([]);
-        setLastDigit(null);
-        setTicksProcessed(0);
-        setCurrentPrice('');
-        try {
-            const { subscription, error } = await apiRef.current.send({ ticks: sym, subscribe: 1 });
-            if (error) throw error;
-            if (subscription?.id) tickStreamIdRef.current = subscription.id;
-            const onMsg = (evt: MessageEvent) => {
-                try {
-                    const data = JSON.parse(evt.data as any);
-                    if (data?.msg_type === 'tick' && data?.tick?.symbol === sym) {
-                        const quote = String(data.tick.quote);
-                        const digit = Number(quote.slice(-1));
-                        setCurrentPrice(quote);
-                        setLastDigit(digit);
-                        setDigits(prev => [...prev.slice(-19), digit]);
-                        setTicksProcessed(prev => prev + 1);
-                    }
-                } catch { /* parse error */ }
-            };
-            messageHandlerRef.current = onMsg;
-            apiRef.current?.connection?.addEventListener('message', onMsg);
-        } catch (e: any) {
-            console.error('startTicks error', e);
-        }
-    };
-
-    const purchaseOnce = async () => {
-        await authorizeIfNeeded();
-        const trade_option: any = {
-            amount: Number(stake),
-            basis: 'stake',
-            contractTypes: [tradeType],
-            currency: account_currency,
-            duration: Number(ticks),
-            duration_unit: 't',
-            symbol,
-        };
-        if (tradeType === 'DIGITOVER' || tradeType === 'DIGITUNDER') {
-            trade_option.prediction = Number(lastOutcomeWasLossRef.current ? ouPredPostLoss : ouPredPreLoss);
-        } else if (tradeType === 'DIGITMATCH' || tradeType === 'DIGITDIFF') {
-            trade_option.prediction = Number(mdPrediction);
-        }
-        const buy_req = tradeOptionToBuy(tradeType, trade_option);
-        const { buy, error } = await apiRef.current.buy(buy_req);
-        if (error) throw error;
-        setStatus(`Purchased: ${buy?.longcode || 'Contract'} (ID: ${buy?.contract_id})`);
-        return buy;
-    };
-
-    const onRun = async () => {
-        setStatus('');
-        setIsRunning(true);
-        stopFlagRef.current = false;
-        run_panel.toggleDrawer(true);
-        run_panel.setActiveTabIndex(1);
-        run_panel.run_id = `smart-${Date.now()}`;
-        run_panel.setIsRunning(true);
-        run_panel.setContractStage(contract_stages.STARTING);
-
-        try {
-            let lossStreak = 0;
-            let step = 0;
-            baseStake !== stake && setBaseStake(stake);
-            while (!stopFlagRef.current) {
-                const effectiveStake = step > 0 ? Number((baseStake * Math.pow(martingaleMultiplier, step)).toFixed(2)) : baseStake;
-                setStake(effectiveStake);
-                const isOU = tradeType === 'DIGITOVER' || tradeType === 'DIGITUNDER';
-                if (isOU) lastOutcomeWasLossRef.current = lossStreak > 0;
-
-                const buy = await purchaseOnce();
-                setTradeCount(prev => prev + 1);
-
-                try {
-                    const symbol_display = symbols.find(s => s.symbol === symbol)?.display_name || symbol;
-                    transactions.onBotContractEvent({
-                        contract_id: buy?.contract_id,
-                        transaction_ids: { buy: buy?.transaction_id },
-                        buy_price: buy?.buy_price,
-                        currency: account_currency,
-                        contract_type: tradeType as any,
-                        underlying: symbol,
-                        display_name: symbol_display,
-                        date_start: Math.floor(Date.now() / 1000),
-                        status: 'open',
-                    } as any);
-                } catch {}
-
-                run_panel.setHasOpenContract(true);
-                run_panel.setContractStage(contract_stages.PURCHASE_SENT);
-
-                try {
-                    const res = await apiRef.current.send({
-                        proposal_open_contract: 1,
-                        contract_id: buy?.contract_id,
-                        subscribe: 1,
-                    });
-                    const { error, proposal_open_contract: pocInit, subscription } = res || {};
-                    if (error) throw error;
-
-                    let pocSubId: string | null = subscription?.id || null;
-                    const targetId = String(buy?.contract_id || '');
-
-                    if (pocInit && String(pocInit?.contract_id || '') === targetId) {
-                        transactions.onBotContractEvent(pocInit);
-                        run_panel.setHasOpenContract(true);
-                    }
+                    try {
+                        const { subscription, error: tickErr } = await api.send({ ticks: s.symbol, subscribe: 1 });
+                        if (!tickErr && subscription?.id) {
+                            tickStreamsRef.current.set(s.symbol, subscription.id);
+                        }
+                    } catch (subErr) { console.warn('Tick subscribe failed for', s.symbol, subErr); }
 
                     const onMsg = (evt: MessageEvent) => {
                         try {
-                            const data = JSON.parse(evt.data as any);
-                            if (data?.msg_type === 'proposal_open_contract') {
-                                const poc = data.proposal_open_contract;
-                                if (!pocSubId && data?.subscription?.id) pocSubId = data.subscription.id;
-                                if (String(poc?.contract_id || '') === targetId) {
-                                    transactions.onBotContractEvent(poc);
-                                    run_panel.setHasOpenContract(true);
-                                    if (poc?.is_sold || poc?.status === 'sold') {
-                                        run_panel.setContractStage(contract_stages.CONTRACT_CLOSED);
-                                        run_panel.setHasOpenContract(false);
-                                        if (pocSubId) apiRef.current?.forget?.({ forget: pocSubId });
-                                        apiRef.current?.connection?.removeEventListener('message', onMsg);
-                                        const profit = Number(poc?.profit || 0);
-                                        setTotalProfit(prev => prev + profit);
-                                        if (profit > 0) {
-                                            lastOutcomeWasLossRef.current = false;
-                                            lossStreak = 0;
-                                            step = 0;
-                                            setStake(baseStake);
-                                            setConsecWins(prev => prev + 1);
-                                            setConsecLosses(0);
-                                        } else {
-                                            lastOutcomeWasLossRef.current = true;
-                                            lossStreak++;
-                                            step = Math.min(step + 1, 50);
-                                            setConsecLosses(prev => prev + 1);
-                                            setConsecWins(0);
-                                        }
-                                    }
+                            const d = JSON.parse(evt.data);
+                            if (d?.msg_type === 'tick' && d?.tick?.symbol === s.symbol) {
+                                const price = Number(d.tick.quote);
+                                const digit = Number(String(d.tick.quote).slice(-1));
+                                const data = tickDataRef.current.get(s.symbol);
+                                if (data) {
+                                    data.digits = [...data.digits.slice(-(TICK_HISTORY_SIZE - 1)), digit];
+                                    data.prices = [...data.prices.slice(-(TICK_HISTORY_SIZE - 1)), price];
+                                    tickDataRef.current.set(s.symbol, data);
+                                }
+                                setTotalTicks(prev => prev + 1);
+                                if (data && data.digits.length % 5 === 0) {
+                                    updateSignalsForSymbol(s.symbol, s.display_name);
                                 }
                             }
-                        } catch {}
+                        } catch (parseErr) { console.warn('Tick parse error', parseErr); }
                     };
-                    apiRef.current?.connection?.addEventListener('message', onMsg);
-                } catch (subErr) {
-                    console.error('subscribe poc error', subErr);
+                    listenersRef.current.set(s.symbol, onMsg);
+                    api?.connection?.addEventListener('message', onMsg);
                 }
-
-                await new Promise(res => setTimeout(res, 500));
+            } catch (e: any) {
+                console.error('Scanner init error', e);
             }
-        } catch (e: any) {
-            console.error('SmartTrader run loop error', e);
-            const msg = e?.message || e?.error?.message || 'Something went wrong';
-            setStatus(`Error: ${msg}`);
-        } finally {
-            setIsRunning(false);
-            run_panel.setIsRunning(false);
-            run_panel.setHasOpenContract(false);
-            run_panel.setContractStage(contract_stages.NOT_RUNNING);
-        }
-    };
+        };
+        init();
 
-    const onStop = () => {
-        stopFlagRef.current = true;
-        setIsRunning(false);
-    };
+        return () => {
+            listenersRef.current.forEach((listener) => {
+                api?.connection?.removeEventListener('message', listener);
+            });
+            tickStreamsRef.current.forEach((id) => {
+                try { api?.forget?.({ forget: id }); } catch (e) { console.warn('forget error', e); }
+            });
+            listenersRef.current.clear();
+            tickStreamsRef.current.clear();
+            api?.disconnect?.();
+        };
+    }, []);
 
-    const selectedTradeType = TRADE_TYPES.find(t => t.value === tradeType);
-    const balance = Number(store?.client?.balance || 0).toFixed(2);
-    const needsPrediction = tradeType === 'DIGITOVER' || tradeType === 'DIGITUNDER';
-    const needsMatchPred = tradeType === 'DIGITMATCH' || tradeType === 'DIGITDIFF';
+    const allSignals: (Signal & { symbol: string; display_name: string })[] = [];
+    symbolSignals.forEach((ss) => {
+        ss.signals.forEach(sig => {
+            allSignals.push({ ...sig, symbol: ss.symbol, display_name: ss.display_name });
+        });
+    });
+
+    const filteredSignals = allSignals
+        .filter(s => s.type === activeCategory)
+        .sort((a, b) => b.confidence - a.confidence);
+
+    const bestByCategory = new Map<string, typeof allSignals>();
+    allSignals.forEach(s => {
+        if (!bestByCategory.has(s.type)) bestByCategory.set(s.type, []);
+        bestByCategory.get(s.type)!.push(s);
+    });
+    bestByCategory.forEach((sigs, cat) => {
+        sigs.sort((a, b) => b.confidence - a.confidence);
+        bestByCategory.set(cat, sigs.slice(0, 4));
+    });
+
+    const categoryCounts = new Map<string, number>();
+    SIGNAL_CATEGORIES.forEach(cat => {
+        categoryCounts.set(cat.id, allSignals.filter(s => s.type === cat.id).length);
+    });
+
+    const getConfidenceColor = (confidence: number) => {
+        if (confidence >= 80) return 'excellent';
+        if (confidence >= 70) return 'strong';
+        if (confidence >= 60) return 'good';
+        return 'moderate';
+    };
 
     return (
-        <div className='smart-trader'>
-            <div className='st-header'>
-                <div className='st-header__left'>
-                    <div className='st-header__icon'>⚡</div>
+        <div className='quantum-scanner'>
+            <div className='qs-header'>
+                <div className='qs-header__left'>
+                    <div className='qs-header__icon'>🔬</div>
                     <div>
-                        <h1 className='st-header__title'>Smart Trader</h1>
-                        <p className='st-header__subtitle'>Automated digit trading with strategy</p>
+                        <h1 className='qs-header__title'>Quantum Market Scanner</h1>
+                        <p className='qs-header__subtitle'>Real-time signal analysis across all synthetic markets</p>
                     </div>
                 </div>
-                <div className='st-header__right'>
-                    <div className='st-header__balance'>
-                        <span className='st-header__balance-label'>Balance</span>
-                        <span className='st-header__balance-value'>{balance} {account_currency}</span>
+                <div className='qs-header__right'>
+                    <div className='qs-header__stat'>
+                        <span className='qs-header__stat-value'>{symbols.length}</span>
+                        <span className='qs-header__stat-label'>Markets</span>
                     </div>
-                    <div className={`st-header__status ${ticksProcessed > 0 ? 'live' : ''}`}>
-                        <span className='st-header__status-dot' />
-                        {ticksProcessed > 0 ? 'Live' : 'Connecting'}
+                    <div className='qs-header__stat'>
+                        <span className='qs-header__stat-value'>{allSignals.length}</span>
+                        <span className='qs-header__stat-label'>Signals</span>
+                    </div>
+                    <div className='qs-header__stat'>
+                        <span className='qs-header__stat-value'>{totalTicks}</span>
+                        <span className='qs-header__stat-label'>Ticks</span>
+                    </div>
+                    <div className={`qs-header__status ${isConnected ? 'live' : ''}`}>
+                        <span className='qs-header__dot' />
+                        {isConnected ? 'Scanning' : 'Connecting'}
                     </div>
                 </div>
             </div>
 
-            <div className='st-body'>
-                <div className='st-sidebar'>
-                    <div className='st-section'>
-                        <div className='st-section__title'>Market</div>
-                        <select
-                            className='st-select'
-                            value={symbol}
-                            onChange={e => { setSymbol(e.target.value); startTicks(e.target.value); }}
-                        >
-                            {symbols.map(s => (
-                                <option key={s.symbol} value={s.symbol}>{s.display_name}</option>
-                            ))}
-                        </select>
+            <div className='qs-nav'>
+                {SIGNAL_CATEGORIES.map(cat => (
+                    <button
+                        key={cat.id}
+                        className={`qs-nav__item ${activeCategory === cat.id ? 'active' : ''}`}
+                        onClick={() => setActiveCategory(cat.id)}
+                    >
+                        <span className='qs-nav__icon'>{cat.icon}</span>
+                        <span className='qs-nav__label'>{cat.label}</span>
+                        <span className='qs-nav__badge'>{categoryCounts.get(cat.id) || 0}</span>
+                    </button>
+                ))}
+            </div>
+
+            <div className='qs-body'>
+                <div className='qs-signals'>
+                    <div className='qs-signals__header'>
+                        <h2 className='qs-signals__title'>
+                            {SIGNAL_CATEGORIES.find(c => c.id === activeCategory)?.icon}{' '}
+                            {SIGNAL_CATEGORIES.find(c => c.id === activeCategory)?.label} Signals
+                        </h2>
+                        <span className='qs-signals__count'>{filteredSignals.length} found</span>
                     </div>
 
-                    <div className='st-section'>
-                        <div className='st-section__title'>Trade Type</div>
-                        <div className='st-trade-types'>
-                            {TRADE_TYPES.map(t => (
-                                <button
-                                    key={t.value}
-                                    className={`st-trade-type ${tradeType === t.value ? 'active' : ''}`}
-                                    onClick={() => setTradeType(t.value)}
-                                >
-                                    <span className='st-trade-type__icon'>{t.icon}</span>
-                                    <span className='st-trade-type__label'>{t.label}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className='st-section'>
-                        <div className='st-section__title'>Parameters</div>
-                        <div className='st-params'>
-                            <div className='st-param'>
-                                <label>Duration (Ticks)</label>
-                                <div className='st-param__control'>
-                                    <button onClick={() => setTicks(Math.max(1, ticks - 1))}>-</button>
-                                    <input type='number' min={1} max={10} value={ticks} onChange={e => setTicks(Number(e.target.value))} />
-                                    <button onClick={() => setTicks(Math.min(10, ticks + 1))}>+</button>
-                                </div>
+                    {filteredSignals.length === 0 && (
+                        <div className='qs-empty'>
+                            <div className='qs-empty__icon'>📡</div>
+                            <div className='qs-empty__text'>
+                                {isConnected
+                                    ? 'No signals meet the confidence threshold yet. Scanner is analyzing...'
+                                    : 'Connecting to markets...'}
                             </div>
-                            <div className='st-param'>
-                                <label>Stake ({account_currency})</label>
-                                <div className='st-param__control'>
-                                    <button onClick={() => setStake(Math.max(0.35, +(stake - 0.5).toFixed(2)))}>-</button>
-                                    <input type='number' step='0.01' min={0.35} value={stake} onChange={e => setStake(Number(e.target.value))} />
-                                    <button onClick={() => setStake(+(stake + 0.5).toFixed(2))}>+</button>
+                            {isConnected && (
+                                <div className='qs-empty__hint'>
+                                    Signals appear when confidence levels reach the required thresholds
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {needsPrediction && (
-                        <div className='st-section'>
-                            <div className='st-section__title'>Prediction Digits</div>
-                            <div className='st-params'>
-                                <div className='st-param'>
-                                    <label>Pre-Loss</label>
-                                    <div className='st-digit-picker'>
-                                        {[0,1,2,3,4,5,6,7,8,9].map(d => (
-                                            <button key={d} className={`st-digit-btn ${ouPredPreLoss === d ? 'active' : ''}`}
-                                                onClick={() => setOuPredPreLoss(d)}>{d}</button>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className='st-param'>
-                                    <label>Post-Loss</label>
-                                    <div className='st-digit-picker'>
-                                        {[0,1,2,3,4,5,6,7,8,9].map(d => (
-                                            <button key={d} className={`st-digit-btn ${ouPredPostLoss === d ? 'active' : ''}`}
-                                                onClick={() => setOuPredPostLoss(d)}>{d}</button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
+                            )}
                         </div>
                     )}
 
-                    {needsMatchPred && (
-                        <div className='st-section'>
-                            <div className='st-section__title'>Prediction Digit</div>
-                            <div className='st-digit-picker'>
-                                {[0,1,2,3,4,5,6,7,8,9].map(d => (
-                                    <button key={d} className={`st-digit-btn ${mdPrediction === d ? 'active' : ''}`}
-                                        onClick={() => setMdPrediction(d)}>{d}</button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    <div className='st-section'>
-                        <div className='st-section__title'>Strategy</div>
-                        <div className='st-param'>
-                            <label>Martingale Multiplier</label>
-                            <div className='st-param__control'>
-                                <button onClick={() => setMartingaleMultiplier(Math.max(1, +(martingaleMultiplier - 0.1).toFixed(1)))}>-</button>
-                                <input type='number' min={1} step='0.1' value={martingaleMultiplier}
-                                    onChange={e => setMartingaleMultiplier(Math.max(1, Number(e.target.value)))} />
-                                <button onClick={() => setMartingaleMultiplier(+(martingaleMultiplier + 0.1).toFixed(1))}>+</button>
-                            </div>
-                        </div>
-                        <div className='st-toggles'>
-                            <label className='st-toggle'>
-                                <span>Alternate Even/Odd</span>
-                                <div className={`st-toggle__switch ${altEvenOdd ? 'on' : ''}`}
-                                    onClick={() => setAltEvenOdd(!altEvenOdd)}>
-                                    <div className='st-toggle__knob' />
+                    <div className='qs-signal-list'>
+                        {filteredSignals.map((sig, idx) => (
+                            <div key={`${sig.symbol}-${sig.label}-${idx}`} className={`qs-signal-card ${getConfidenceColor(sig.confidence)}`}>
+                                <div className='qs-signal-card__top'>
+                                    <div className='qs-signal-card__market'>{sig.display_name}</div>
+                                    <div className={`qs-signal-card__badge ${getConfidenceColor(sig.confidence)}`}>
+                                        {sig.confidence}%
+                                    </div>
                                 </div>
-                            </label>
-                            <label className='st-toggle'>
-                                <span>Alternate on Loss</span>
-                                <div className={`st-toggle__switch ${altOnLoss ? 'on' : ''}`}
-                                    onClick={() => setAltOnLoss(!altOnLoss)}>
-                                    <div className='st-toggle__knob' />
+                                <div className='qs-signal-card__signal'>
+                                    <span className={`qs-signal-card__arrow ${sig.direction}`}>
+                                        {sig.direction === 'up' ? '▲' : sig.direction === 'down' ? '▼' : '●'}
+                                    </span>
+                                    <span className='qs-signal-card__label'>{sig.label}</span>
                                 </div>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div className='st-actions'>
-                        {!is_running ? (
-                            <>
-                                <button className='st-btn st-btn--trade' onClick={onRun} disabled={!symbol}>
-                                    Trade Once
-                                </button>
-                                <button className='st-btn st-btn--auto' onClick={onRun} disabled={!symbol}>
-                                    Auto Trade
-                                </button>
-                            </>
-                        ) : (
-                            <button className='st-btn st-btn--stop' onClick={onStop}>
-                                Stop Trading
-                            </button>
-                        )}
+                                <div className='qs-signal-card__detail'>{sig.detail}</div>
+                                <div className='qs-signal-card__bar'>
+                                    <div
+                                        className={`qs-signal-card__bar-fill ${getConfidenceColor(sig.confidence)}`}
+                                        style={{ width: `${sig.confidence}%` }}
+                                    />
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
 
-                <div className='st-main'>
-                    <div className='st-live-panel'>
-                        <div className='st-live-panel__header'>
-                            <div className='st-live-panel__title'>Live Digit Stream</div>
-                            <div className='st-live-panel__info'>
-                                <span className='st-live-panel__price'>{currentPrice || '---'}</span>
-                                <span className='st-live-panel__ticks'>{ticksProcessed} ticks</span>
-                            </div>
-                        </div>
-                        <div className='st-digit-stream'>
-                            {digits.length === 0 && (
-                                <div className='st-digit-stream__empty'>Waiting for market data...</div>
-                            )}
-                            {digits.map((d, idx) => (
-                                <div
-                                    key={`${idx}-${d}`}
-                                    className={`st-digit-cell ${getHintClass(d)} ${idx === digits.length - 1 ? 'latest' : ''}`}
-                                >
-                                    {d}
+                <div className='qs-overview'>
+                    <h3 className='qs-overview__title'>Top Signals Overview</h3>
+                    {SIGNAL_CATEGORIES.map(cat => {
+                        const catSignals = bestByCategory.get(cat.id) || [];
+                        if (catSignals.length === 0) return null;
+                        return (
+                            <div key={cat.id} className='qs-overview__group'>
+                                <div className='qs-overview__group-header'>
+                                    <span>{cat.icon} {cat.label}</span>
+                                    <span className='qs-overview__group-count'>{catSignals.length}</span>
                                 </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className='st-stats-grid'>
-                        <div className='st-stat-card st-stat-card--profit'>
-                            <div className='st-stat-card__label'>Total P/L</div>
-                            <div className={`st-stat-card__value ${totalProfit >= 0 ? 'positive' : 'negative'}`}>
-                                {totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(2)}
+                                {catSignals.slice(0, 2).map((sig, idx) => (
+                                    <div key={idx} className={`qs-overview__item ${getConfidenceColor(sig.confidence)}`}>
+                                        <span className='qs-overview__item-market'>{sig.display_name}</span>
+                                        <span className='qs-overview__item-signal'>{sig.label}</span>
+                                        <span className={`qs-overview__item-conf ${getConfidenceColor(sig.confidence)}`}>
+                                            {sig.confidence}%
+                                        </span>
+                                    </div>
+                                ))}
                             </div>
-                        </div>
-                        <div className='st-stat-card'>
-                            <div className='st-stat-card__label'>Last Digit</div>
-                            <div className='st-stat-card__value highlight'>{lastDigit ?? '-'}</div>
-                        </div>
-                        <div className='st-stat-card'>
-                            <div className='st-stat-card__label'>Win Streak</div>
-                            <div className='st-stat-card__value positive'>{consecWins}</div>
-                        </div>
-                        <div className='st-stat-card'>
-                            <div className='st-stat-card__label'>Loss Streak</div>
-                            <div className='st-stat-card__value negative'>{consecLosses}</div>
-                        </div>
-                        <div className='st-stat-card'>
-                            <div className='st-stat-card__label'>Trades</div>
-                            <div className='st-stat-card__value'>{tradeCount}</div>
-                        </div>
-                        <div className='st-stat-card'>
-                            <div className='st-stat-card__label'>Strategy</div>
-                            <div className='st-stat-card__value small'>{selectedTradeType?.label || '-'}</div>
-                        </div>
-                    </div>
-
-                    {status && (
-                        <div className={`st-status ${/error|fail/i.test(status) ? 'error' : 'info'}`}>
-                            {status}
-                        </div>
+                        );
+                    })}
+                    {allSignals.length === 0 && (
+                        <div className='qs-overview__empty'>Scanning markets...</div>
                     )}
                 </div>
             </div>

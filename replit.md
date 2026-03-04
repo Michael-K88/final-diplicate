@@ -4,7 +4,9 @@
 A React-based trading bot builder application (Deriv Bot) that allows users to create automated trading strategies using a visual block-based editor (Blockly). Built with TypeScript, React 18, and rsbuild as the build tool.
 
 ## Recent Changes
-- 2026-03-04: Redesigned Pro Tool - complete rewrite with symbol selector, live digit distribution chart, tabbed trade cards (Over/Under, Even/Odd, Rise/Fall, Match/Differ), auto-trade functionality, and trade results panel. Fixed WebSocket listener leaks and currency sync bugs.
+- 2026-03-04: Removed Pro Tool menu. Replaced Smart Trader with Quantum Market Scanner - real-time signal scanner across all synthetic markets. Analyzes 150-tick history for Over/Under, Even/Odd, Rise/Fall, Higher/Lower, Matches/Differs signals with configurable confidence thresholds.
+- 2026-03-04: Fixed tab bar active state - removed transparent background override so active tab keeps its highlighted background persistently.
+- 2026-03-04: Renamed Analysis Tool header from "Binarytool" to "Blue Traders Analysis Tool".
 - 2026-03-04: Fixed Run button visibility - increased z-index to 10 on desktop, added fixed mobile controls bar at bottom. Made Run button bright green (#008832) for visibility.
 - 2026-03-04: Updated tab bar - white text on dark background, proper hover states with persistent visibility.
 - 2026-02-20: Renamed site to "Blue Traders" (bluetraders.site), added splash screen with live market data animation, progress bar, and navy blue branding.
