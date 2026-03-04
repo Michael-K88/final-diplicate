@@ -167,16 +167,38 @@
 
     .digit-circle {
       position: relative;
-      width: 72px;
-      height: 72px;
+      width: 80px;
+      height: 80px;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: transform 0.2s ease;
+      border-radius: 50%;
+      transition: transform 0.25s ease, background 0.3s ease, box-shadow 0.3s ease;
+      background: #f1f5f9;
+
+      &.green {
+        background: rgba(16, 185, 129, 0.12);
+        box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+      }
+      &.blue {
+        background: rgba(59, 130, 246, 0.12);
+        box-shadow: 0 0 12px rgba(59, 130, 246, 0.25);
+      }
+      &.red {
+        background: rgba(239, 68, 68, 0.12);
+        box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
+      }
+      &.yellow {
+        background: rgba(245, 158, 11, 0.12);
+        box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
+      }
+      &.default {
+        background: #f1f5f9;
+      }
 
       &.pulse {
-        transform: scale(1.1);
-        filter: drop-shadow(0 0 8px rgba(0, 102, 204, 0.4));
+        transform: scale(1.12);
+        filter: drop-shadow(0 0 10px rgba(0, 102, 204, 0.5));
       }
 
       &__svg {
@@ -188,7 +210,7 @@
 
       &__track {
         fill: none;
-        stroke: #e2e8f0;
+        stroke: rgba(0, 0, 0, 0.08);
         stroke-width: 4;
       }
 
@@ -214,13 +236,13 @@
       }
 
       &__digit {
-        font-size: 1.1rem;
+        font-size: 1.15rem;
         font-weight: 800;
         color: #1e293b;
       }
 
       &__pct {
-        font-size: 0.65rem;
+        font-size: 0.7rem;
         font-weight: 700;
         margin-top: 2px;
 

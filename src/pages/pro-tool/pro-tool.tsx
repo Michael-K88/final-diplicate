@@ -350,12 +350,27 @@ const ProTool = observer(() => {
         <div className="digit-chart__title">Digit Distribution</div>
         <div className="digit-chart__circles">
           {(() => {
-            const total = digitHistory.length || 1;
+            const total = digitHistory.length;
             const uniqueSorted = [...new Set(digitCounts)].filter(v => v > 0).sort((a, b) => b - a);
             const len = uniqueSorted.length;
-            return digitCounts.map((count, i) => {
-            const pct = Math.round((count / total) * 100);
+            let floored: number[];
+            if (total === 0) {
+              floored = new Array(10).fill(0);
+            } else {
+              const rawPcts = digitCounts.map(c => (c / total) * 100);
+              floored = rawPcts.map(p => Math.floor(p));
+              let remainder = 100 - floored.reduce((s, v) => s + v, 0);
+              const decimals = rawPcts.map((p, idx) => ({ idx, dec: p - Math.floor(p) }))
+                .sort((a, b) => b.dec - a.dec);
+              for (const d of decimals) {
+                if (remainder <= 0) break;
+                floored[d.idx]++;
+                remainder--;
+              }
+            }
             const circumference = 2 * Math.PI * 28;
+            return digitCounts.map((count, i) => {
+            const pct = floored[i];
             const offset = circumference - (pct / 100) * circumference;
             let colorClass = 'default';
             if (count > 0 && len >= 2) {
@@ -367,7 +382,7 @@ const ProTool = observer(() => {
               else if (rankFromBottom === 1) colorClass = 'yellow';
             }
             return (
-              <div key={i} className={`digit-circle ${lastDigit === i ? 'pulse' : ''}`}>
+              <div key={i} className={`digit-circle ${colorClass} ${lastDigit === i ? 'pulse' : ''}`}>
                 <svg className="digit-circle__svg" viewBox="0 0 64 64">
                   <circle className="digit-circle__track" cx="32" cy="32" r="28" />
                   <circle
