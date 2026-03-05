@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import Button from '@/components/shared_ui/button';
 import Text from '@/components/shared_ui/text';
@@ -19,152 +19,95 @@ interface BotData {
 
 const DEFAULT_FEATURES = ['Automated Trading', 'Risk Management', 'Profit Optimization'];
 
+const FALLBACK_FILES = [
+    'Gold Miner Pro.xml',
+    'Bandwagon Entry Point Bot.xml',
+    'Upgraded Candle Mine.xml',
+    'Super Elite.xml',
+    'Greenprint Profit Bot.xml',
+    'AUTO C4 PRO Version.xml',
+    'H L Auto Vault.xml',
+    'Master AI Under 9.xml',
+    'Mkorean SV4.xml',
+    '$DollarprinterbotOrignal$.xml',
+    '360 PRINTER BOT____ [ Version 2.2 ].xml',
+    'Candle-Mine Version 2  (2).xml',
+    'TC Bot 1.1.xml',
+];
+
+const makeBotData = (name: string, xml = ''): BotData => ({
+    name: name.replace(/[_-]/g, ' '),
+    description: `Advanced trading bot: ${name.replace(/[_-]/g, ' ')}`,
+    difficulty: 'Intermediate',
+    strategy: 'Multi-Strategy',
+    features: DEFAULT_FEATURES,
+    xml,
+});
 
 const FreeBots = observer(() => {
-    const { dashboard, app } = useStore();
+    const { dashboard } = useStore();
     const { active_tab, setActiveTab, setPendingFreeBot } = dashboard;
     const [availableBots, setAvailableBots] = useState<BotData[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const loadedRef = useRef(false);
 
-    const getXmlFiles = () => {
-        return [
-            'Gold Miner Pro.xml',
-            'Bandwagon Entry Point Bot.xml',
-            'Upgraded Candle Mine.xml',
-            'Super Elite.xml',
-            'Greenprint Profit Bot.xml',
-            'AUTO C4 PRO Version.xml',
-            'H L Auto Vault.xml',
-            'Master AI Under 9.xml',
-            'Mkorean SV4.xml',
-            '$DollarprinterbotOrignal$.xml',
-            '360 PRINTER BOT____ [ Version 2.2 ].xml',
-            'Candle-Mine Version 2  (2).xml',
-            'TC Bot 1.1.xml',
-        ];
-    };
-
-    // Wait for workspace to be available
-    const waitForWorkspace = (maxAttempts = 10, delay = 500) => {
-        return new Promise((resolve, reject) => {
-            let attempts = 0;
-
-            const checkWorkspace = () => {
-                attempts++;
-                if (window.Blockly?.derivWorkspace) {
-                    console.log('Workspace is ready!');
-                    resolve(window.Blockly.derivWorkspace);
-                } else if (attempts >= maxAttempts) {
-                    reject(new Error('Workspace not available after maximum attempts'));
-                } else {
-                    console.log(`Waiting for workspace... attempt ${attempts}/${maxAttempts}`);
-                    setTimeout(checkWorkspace, delay);
-                }
-            };
-
-            checkWorkspace();
-        });
-    };
-
-    // Load bot into builder
     const loadBotIntoBuilder = async (bot: BotData) => {
         try {
             if (bot.xml) {
-                console.log('Loading bot:', bot.name);
-                console.log('Blockly workspace available:', !!window.Blockly?.derivWorkspace);
-
-                // Flag the selected bot for the Bot Builder to load after navigation
                 setPendingFreeBot({ name: bot.name, xml: bot.xml });
-
-                // Navigate to Bot Builder; loading will be handled when workspace is ready
                 setActiveTab(DBOT_TABS.BOT_BUILDER);
-
-                console.log('Navigating to Bot Builder to load bot:', bot.name);
             }
-        } catch (error) {
-            console.error('Error loading bot:', error);
+        } catch (err) {
+            console.error('Error loading bot:', err);
         }
     };
 
-    // Load bots with instant UI and progressive loading (no blocking spinner)
     useEffect(() => {
-        const loadBots = async () => {
-            if (active_tab !== DBOT_TABS.FREE_BOTS) return;
+        if (active_tab !== DBOT_TABS.FREE_BOTS) return;
+        if (loadedRef.current) return;
 
+        const loadBots = async () => {
             setError(null);
 
-            // 0) Immediately render skeleton cards from a small fallback list
-            const fallback = getXmlFiles().map(file => ({ name: file.replace('.xml', ''), file }));
-            const initialSkeleton: BotData[] = fallback.map(item => ({
-                name: (item.name || item.file.replace('.xml', '')).replace(/[_-]/g, ' '),
-                description: `Advanced trading bot: ${(item.name || item.file.replace('.xml', '')).replace(/[_-]/g, ' ')}`,
-                difficulty: 'Intermediate',
-                strategy: 'Multi-Strategy',
-                features: DEFAULT_FEATURES,
-                xml: '',
-            }));
-            setAvailableBots(initialSkeleton);
-            setIsLoading(false); // hide "Loading free bots..." right away
+            const fallback = FALLBACK_FILES.map(f => ({ name: f.replace('.xml', ''), file: f }));
+            const skeletons = fallback.map(item => makeBotData(item.name));
+            setAvailableBots(skeletons);
+            setIsLoading(false);
 
             try {
-                // 1) Fetch manifest with timeout; fallback to initial list if slow
-                const withTimeout = <T,>(p: Promise<T>, ms = 800): Promise<T | null> =>
-                    new Promise(resolve => {
-                        const t = setTimeout(() => resolve(null), ms);
-                        p.then(r => {
-                            clearTimeout(t);
-                            resolve(r);
-                        }).catch(() => {
-                            clearTimeout(t);
-                            resolve(null);
-                        });
-                    });
+                const manifestPromise = getBotsManifest();
+                const timeoutPromise = new Promise<null>(r => setTimeout(() => r(null), 600));
+                const manifest = (await Promise.race([manifestPromise, timeoutPromise])) || fallback;
 
-                const manifest = (await withTimeout(getBotsManifest(), 800)) || fallback;
+                const files = manifest.map(m => m.file);
+                const names = manifest.map(m => (m.name || m.file.replace('.xml', '')));
 
-                // 2) If manifest differs, update skeletons to match
-                const skeletonBots: BotData[] = manifest.map(item => ({
-                    name: (item.name || item.file.replace('.xml', '')).replace(/[_-]/g, ' '),
-                    description: `Advanced trading bot: ${(item.name || item.file.replace('.xml', '')).replace(/[_-]/g, ' ')}`,
-                    difficulty: 'Intermediate',
-                    strategy: 'Multi-Strategy',
-                    features: DEFAULT_FEATURES,
-                    xml: '',
-                }));
-                setAvailableBots(skeletonBots);
-
-                // 3) Load XMLs progressively in background
-                const loadedBots: BotData[] = [];
-                for (let i = 0; i < manifest.length; i++) {
-                    const item = manifest[i];
-                    try {
-                        const xml = await fetchXmlWithCache(item.file);
-                        if (xml) {
-                            const botName = (item.name || item.file.replace('.xml', '')).replace(/[_-]/g, ' ');
-                            loadedBots.push({
-                                name: botName,
-                                description: `Advanced trading bot: ${botName}`,
-                                difficulty: 'Intermediate',
-                                strategy: 'Multi-Strategy',
-                                features: DEFAULT_FEATURES,
-                                xml,
-                            });
-                            setAvailableBots([...loadedBots, ...skeletonBots.slice(loadedBots.length)]);
-                        }
-                    } catch (err) {
-                        console.warn(`Failed to load ${item.file}:`, err);
-                    }
+                if (JSON.stringify(files) !== JSON.stringify(FALLBACK_FILES)) {
+                    setAvailableBots(names.map(n => makeBotData(n)));
                 }
-            } catch (error) {
-                console.error('Error loading bots:', error);
+
+                const results = await Promise.allSettled(files.map(f => fetchXmlWithCache(f)));
+
+                const bots: BotData[] = results.map((result, i) => {
+                    const xml = result.status === 'fulfilled' ? result.value : null;
+                    return makeBotData(names[i], xml || '');
+                });
+
+                setAvailableBots(bots);
+                loadedRef.current = true;
+            } catch (err) {
+                console.error('Error loading bots:', err);
                 setError('Failed to load bots. Please try again.');
             }
         };
 
         loadBots();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [active_tab]);
+
+    useEffect(() => {
+        prefetchAllXmlInBackground(FALLBACK_FILES);
+    }, []);
 
     return (
         <div className='free-bots'>
@@ -193,7 +136,7 @@ const FreeBots = observer(() => {
                 ) : (
                     <div className='free-bots__grid'>
                         {availableBots.map((bot, index) => (
-                            <div key={index} className='free-bot-card'>
+                            <div key={bot.name || index} className='free-bot-card'>
                                 <div className='free-bot-card__number'>#{index + 1}</div>
                                 <div className='free-bot-card__title'>{bot.name}</div>
                                 <div className='free-bot-card__subtitle'>Free and customizable bots</div>

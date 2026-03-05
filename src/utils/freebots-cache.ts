@@ -3,7 +3,7 @@ import LZString from 'lz-string';
 
 export type TBotsManifestItem = {
     name: string;
-    file: string; // xml filename in /public/xml
+    file: string;
     description?: string;
     difficulty?: string;
     strategy?: string;
@@ -12,10 +12,9 @@ export type TBotsManifestItem = {
 
 const XML_CACHE_PREFIX = 'freebots:xml:';
 
-// In-memory cache for faster access
 const memoryCache = new Map<string, string>();
+const inflightRequests = new Map<string, Promise<string | null>>();
 
-// Domain-aware XML base path: defaults to /xml/, but can switch to /xml/<domain>/ after manifest resolution
 let XML_BASE = '/xml/';
 export const getXmlBase = () => XML_BASE;
 const setXmlBase = (base: string) => {
@@ -30,9 +29,7 @@ export const getCachedXml = async (file: string): Promise<string | null> => {
         const key = `${XML_CACHE_PREFIX}${file}`;
         const cached = (await localforage.getItem<string>(key)) || null;
         return decompress(cached);
-    } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn('freebots-cache:getCachedXml error', e);
+    } catch {
         return null;
     }
 };
@@ -41,92 +38,70 @@ export const setCachedXml = async (file: string, xml: string) => {
     try {
         const key = `${XML_CACHE_PREFIX}${file}`;
         await localforage.setItem(key, compress(xml));
-    } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn('freebots-cache:setCachedXml error', e);
-    }
+    } catch {}
 };
 
 export const fetchXmlWithCache = async (file: string): Promise<string | null> => {
-    // Check memory cache first
     if (memoryCache.has(file)) {
         return memoryCache.get(file)!;
     }
 
-    // Check persistent cache
-    const cached = await getCachedXml(file);
-    if (cached) {
-        memoryCache.set(file, cached); // Store in memory for faster access
-        return cached;
+    if (inflightRequests.has(file)) {
+        return inflightRequests.get(file)!;
     }
 
-    try {
-        // 1) Try domain-specific base (set after manifest) else default /xml/
-        const primaryUrl = `${getXmlBase()}${encodeURIComponent(file)}`;
-        let res = await fetch(primaryUrl);
-
-        // 2) Fallback: try default /xml/ if domain-specific path 404s
-        if (!res.ok) {
-            const fallbackUrl = `/xml/${encodeURIComponent(file)}`;
-            res = await fetch(fallbackUrl);
+    const doFetch = async (): Promise<string | null> => {
+        const cached = await getCachedXml(file);
+        if (cached) {
+            memoryCache.set(file, cached);
+            return cached;
         }
 
-        if (!res.ok) throw new Error(`Failed to fetch ${file}: ${res.status}`);
-        const xml = await res.text();
+        try {
+            const url = `${getXmlBase()}${encodeURIComponent(file)}`;
+            const res = await fetch(url, { cache: 'force-cache' });
 
-        // Store in both caches
-        memoryCache.set(file, xml);
-        await setCachedXml(file, xml);
-        return xml;
-    } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('freebots-cache:fetchXmlWithCache error', e);
-        return null;
-    }
+            if (!res.ok && getXmlBase() !== '/xml/') {
+                const fallbackRes = await fetch(`/xml/${encodeURIComponent(file)}`, { cache: 'force-cache' });
+                if (!fallbackRes.ok) throw new Error(`${file}: ${fallbackRes.status}`);
+                const xml = await fallbackRes.text();
+                memoryCache.set(file, xml);
+                setCachedXml(file, xml);
+                return xml;
+            }
+
+            if (!res.ok) throw new Error(`${file}: ${res.status}`);
+            const xml = await res.text();
+            memoryCache.set(file, xml);
+            setCachedXml(file, xml);
+            return xml;
+        } catch {
+            return null;
+        }
+    };
+
+    const promise = doFetch().finally(() => inflightRequests.delete(file));
+    inflightRequests.set(file, promise);
+    return promise;
 };
 
 export const prefetchAllXmlInBackground = async (files: string[]) => {
-    // Fire-and-forget prefetch with throttling to avoid overwhelming the browser
-    const batchSize = 3; // Load 3 files at a time
-    for (let i = 0; i < files.length; i += batchSize) {
-        const batch = files.slice(i, i + batchSize);
-        await Promise.allSettled(batch.map(file => fetchXmlWithCache(file)));
-        // Small delay between batches to prevent blocking
-        if (i + batchSize < files.length) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-    }
+    await Promise.allSettled(files.map(file => fetchXmlWithCache(file)));
 };
 
+let manifestCache: TBotsManifestItem[] | null = null;
+
 export const getBotsManifest = async (): Promise<TBotsManifestItem[] | null> => {
+    if (manifestCache) return manifestCache;
+
     try {
-        const hostname = window.location.hostname.toLowerCase();
-        const urlParams = new URLSearchParams(window.location.search);
-        const override = (urlParams.get('bots_domain') || '').toLowerCase().replace(/^www\./, '');
-        const domain = (override || hostname).replace(/^www\./, '');
-
-        // Try domain-specific manifest first
-        let res = await fetch(`/xml/${encodeURIComponent(domain)}/bots.json`, { cache: 'force-cache' });
-        if (!res.ok) {
-            // Fallback to generic manifest
-            res = await fetch('/xml/bots.json', { cache: 'force-cache' });
-        }
+        const res = await fetch('/xml/bots.json', { cache: 'force-cache' });
         if (!res.ok) return null;
-
         const data = (await res.json()) as TBotsManifestItem[];
-
-        // If we loaded a domain-specific file, set base for XML fetches
-        if (res.url.includes(`/${domain}/bots.json`)) {
-            setXmlBase(`/xml/${domain}/`);
-        } else {
-            setXmlBase('/xml/');
-        }
-
+        manifestCache = data;
+        setXmlBase('/xml/');
         return data;
-    } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn('freebots-cache:getBotsManifest error', e);
+    } catch {
         return null;
     }
 };
-
