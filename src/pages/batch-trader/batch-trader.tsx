@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import './batch-trader.scss';
 
 const APP_ID = 128207;
@@ -21,10 +21,10 @@ const MARKETS = [
 ];
 
 const CONTRACT_GROUPS = [
-    { label: 'Odd/Even', value: 'odd_even', icon: '🎲' },
-    { label: 'Over/Under', value: 'over_under', icon: '📊' },
-    { label: 'Matches/Differs', value: 'matches_differs', icon: '🎯' },
-    { label: 'Rise/Fall', value: 'rise_fall', icon: '📈' },
+    { label: 'Odd/Even', value: 'odd_even' },
+    { label: 'Over/Under', value: 'over_under' },
+    { label: 'Matches/Differs', value: 'matches_differs' },
+    { label: 'Rise/Fall', value: 'rise_fall' },
 ];
 
 const CONTRACT_MAP: Record<string, { a: string; b: string; aLabel: string; bLabel: string; aIcon: string; bIcon: string }> = {
@@ -34,10 +34,17 @@ const CONTRACT_MAP: Record<string, { a: string; b: string; aLabel: string; bLabe
     rise_fall: { a: 'CALL', b: 'PUT', aLabel: 'Rise', bLabel: 'Fall', aIcon: '⬆', bIcon: '⬇' },
 };
 
-const DIGIT_COLORS = [
-    '#2563eb', '#eab308', '#6366f1', '#f97316', '#64748b',
-    '#8b5cf6', '#14b8a6', '#3b82f6', '#ef4444', '#22c55e',
+const DIGIT_BASE_COLORS = [
+    '#3b82f6', '#eab308', '#8b5cf6', '#f97316', '#6b7280',
+    '#06b6d4', '#14b8a6', '#3b82f6', '#ef4444', '#22c55e',
 ];
+
+const RANK_COLORS = {
+    most: '#22c55e',
+    second: '#3b82f6',
+    secondLast: '#eab308',
+    least: '#ef4444',
+};
 
 const requiresBarrier = (type: string) =>
     ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(type);
@@ -58,6 +65,23 @@ const NAV_ITEMS = [
     { id: 'log', icon: '📋', label: 'Log' },
     { id: 'risk', icon: '🛡️', label: 'Risk' },
 ];
+
+const TYPE_LABELS: Record<string, string> = {
+    DIGITODD: 'Odd', DIGITEVEN: 'Even', DIGITOVER: 'Over', DIGITUNDER: 'Under',
+    DIGITMATCH: 'Matches', DIGITDIFF: 'Differs', CALL: 'Rise', PUT: 'Fall',
+};
+
+function getDigitRankColor(digitFreqs: number[], digitIndex: number): string {
+    if (digitFreqs.every(f => f === 0)) return DIGIT_BASE_COLORS[digitIndex];
+    const indexed = digitFreqs.map((f, i) => ({ f, i }));
+    const sorted = [...indexed].sort((a, b) => b.f - a.f);
+    const rank = sorted.findIndex(s => s.i === digitIndex);
+    if (rank === 0) return RANK_COLORS.most;
+    if (rank === 1) return RANK_COLORS.second;
+    if (rank === sorted.length - 1) return RANK_COLORS.least;
+    if (rank === sorted.length - 2) return RANK_COLORS.secondLast;
+    return DIGIT_BASE_COLORS[digitIndex];
+}
 
 const BatchTrader: React.FC = () => {
     const [token, setToken] = useState('');
@@ -95,10 +119,10 @@ const BatchTrader: React.FC = () => {
     const [takeProfit, setTakeProfit] = useState(0);
 
     const wsRef = useRef<WebSocket | null>(null);
+    const tickWsRef = useRef<WebSocket | null>(null);
     const reqIdRef = useRef(1);
     const pendingRef = useRef<Map<number, { resolve: Function; reject: Function }>>(new Map());
     const stopBatchRef = useRef(false);
-    const tickSubIdRef = useRef<string | null>(null);
     const pnlRef = useRef(0);
     const riskRef = useRef({ stopLoss: 0, takeProfit: 0 });
     riskRef.current = { stopLoss, takeProfit };
@@ -130,7 +154,8 @@ const BatchTrader: React.FC = () => {
         setDigitFreqs(counts.map(c => parseFloat(((c / total) * 100).toFixed(1))));
     }, []);
 
-    const handleTick = useCallback((tick: any) => {
+    const handleTickRef = useRef<(tick: any) => void>();
+    handleTickRef.current = (tick: any) => {
         const price = tick.quote.toString();
         const digit = parseInt(price.slice(-1));
         setCurrentTick(price);
@@ -140,7 +165,41 @@ const BatchTrader: React.FC = () => {
         if (history.length > 1000) history.shift();
         setTickCount(history.length);
         updateDigitFreqs(history);
-    }, [updateDigitFreqs]);
+    };
+
+    useEffect(() => {
+        if (tickWsRef.current) {
+            tickWsRef.current.close();
+            tickWsRef.current = null;
+        }
+
+        digitHistoryRef.current = [];
+        setDigitFreqs(Array(10).fill(0));
+        setCurrentTick('');
+        setLastDigit(null);
+        setTickCount(0);
+
+        const ws = new WebSocket(WS_URL);
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ ticks: market, subscribe: 1 }));
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.msg_type === 'tick' && data.tick) {
+                handleTickRef.current?.(data.tick);
+            }
+        };
+
+        ws.onerror = () => {};
+
+        tickWsRef.current = ws;
+
+        return () => {
+            ws.close();
+        };
+    }, [market]);
 
     const handleContractUpdate = useCallback((contract: any, subscriptionId?: string) => {
         if (contract.is_sold || contract.is_expired || contract.status === 'sold') {
@@ -220,10 +279,6 @@ const BatchTrader: React.FC = () => {
                 }
             }
 
-            if (data.msg_type === 'tick') {
-                handleTick(data.tick);
-            }
-
             if (data.msg_type === 'balance') {
                 setBalance(parseFloat(data.balance.balance));
                 setCurrency(data.balance.currency);
@@ -254,49 +309,21 @@ const BatchTrader: React.FC = () => {
         };
 
         wsRef.current = ws;
-    }, [token, handleTick, handleContractUpdate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [token]);
 
     const disconnect = useCallback(() => {
         wsRef.current?.close();
         wsRef.current = null;
         setIsConnected(false);
         setIsAuthorized(false);
-        digitHistoryRef.current = [];
-        setDigitFreqs(Array(10).fill(0));
-        setCurrentTick('');
-        setLastDigit(null);
-        setTickCount(0);
     }, []);
 
     useEffect(() => {
-        if (!isAuthorized || !wsRef.current) return;
-
-        if (tickSubIdRef.current) {
-            wsRef.current.send(JSON.stringify({ forget: tickSubIdRef.current }));
-            tickSubIdRef.current = null;
-        }
-
-        digitHistoryRef.current = [];
-        setDigitFreqs(Array(10).fill(0));
-        setCurrentTick('');
-        setLastDigit(null);
-        setTickCount(0);
-
-        wsRef.current.send(JSON.stringify({ ticks: market, subscribe: 1 }));
-
-        const ws = wsRef.current;
-        const captureSubId = (event: MessageEvent) => {
-            const data = JSON.parse(event.data);
-            if (data.msg_type === 'tick' && data.subscription) {
-                tickSubIdRef.current = data.subscription.id;
-                ws.removeEventListener('message', captureSubId);
-            }
+        return () => {
+            wsRef.current?.close();
+            tickWsRef.current?.close();
         };
-        ws.addEventListener('message', captureSubId);
-    }, [isAuthorized, market]);
-
-    useEffect(() => {
-        return () => { wsRef.current?.close(); };
     }, []);
 
     const executeBatch = useCallback(async (contractType: string) => {
@@ -415,10 +442,9 @@ const BatchTrader: React.FC = () => {
             : (100 - (digitFreqs[prediction] || 0)).toFixed(0))
         : '50';
 
-    const TYPE_LABELS: Record<string, string> = {
-        DIGITODD: 'Odd', DIGITEVEN: 'Even', DIGITOVER: 'Over', DIGITUNDER: 'Under',
-        DIGITMATCH: 'Matches', DIGITDIFF: 'Differs', CALL: 'Rise', PUT: 'Fall',
-    };
+    const digitRankColors = useMemo(() => {
+        return digitFreqs.map((_, i) => getDigitRankColor(digitFreqs, i));
+    }, [digitFreqs]);
 
     return (
         <div className='bbt'>
@@ -520,17 +546,21 @@ const BatchTrader: React.FC = () => {
                                     </>
                                 )}
 
-                                {currentTick && (
-                                    <div className='bbt-curtick'>
-                                        <span className='bbt-curtick__label'>Current Tick:</span>
-                                        <span className='bbt-curtick__val'>
-                                            {currentTick.slice(0, -1)}
-                                            <span className='bbt-curtick__digit' style={{ color: DIGIT_COLORS[lastDigit || 0] }}>
-                                                {currentTick.slice(-1)}
-                                            </span>
-                                        </span>
-                                    </div>
-                                )}
+                                <div className='bbt-curtick'>
+                                    <span className='bbt-curtick__label'>Current Tick:</span>
+                                    <span className='bbt-curtick__val'>
+                                        {currentTick ? (
+                                            <>
+                                                {currentTick.slice(0, -1)}
+                                                <span className='bbt-curtick__digit' style={{ color: digitRankColors[lastDigit ?? 0] }}>
+                                                    {currentTick.slice(-1)}
+                                                </span>
+                                            </>
+                                        ) : (
+                                            <span className='bbt-curtick__waiting'>Connecting...</span>
+                                        )}
+                                    </span>
+                                </div>
 
                                 <div className='bbt-digits'>
                                     <h4 className='bbt-digits__title'>Digit Statistics (Last {tickCount} ticks)</h4>
@@ -541,6 +571,7 @@ const BatchTrader: React.FC = () => {
                                             const pct = freq || 0;
                                             const circumference = 2 * Math.PI * 22;
                                             const dashOffset = circumference - (circumference * pct / 100);
+                                            const ringColor = digitRankColors[i];
                                             return (
                                                 <div
                                                     key={i}
@@ -548,10 +579,10 @@ const BatchTrader: React.FC = () => {
                                                     onClick={() => showPrediction && setPrediction(i)}
                                                 >
                                                     <svg className='bbt-digit__ring' viewBox='0 0 50 50'>
-                                                        <circle cx='25' cy='25' r='22' fill='none' stroke='#e5e7eb' strokeWidth='3' />
+                                                        <circle cx='25' cy='25' r='22' fill='#2d3748' stroke='#4a5568' strokeWidth='2.5' />
                                                         <circle
                                                             cx='25' cy='25' r='22' fill='none'
-                                                            stroke={DIGIT_COLORS[i]}
+                                                            stroke={ringColor}
                                                             strokeWidth='3'
                                                             strokeDasharray={circumference}
                                                             strokeDashoffset={dashOffset}
@@ -561,11 +592,19 @@ const BatchTrader: React.FC = () => {
                                                     </svg>
                                                     <div className='bbt-digit__inner'>
                                                         <span className='bbt-digit__num'>{i}</span>
-                                                        <span className='bbt-digit__pct' style={{ color: DIGIT_COLORS[i] }}>{freq}%</span>
+                                                        <span className='bbt-digit__pct' style={{ color: ringColor }}>{freq}%</span>
                                                     </div>
+                                                    {isActive && <div className='bbt-digit__cursor' />}
+                                                    {isSelected && <div className='bbt-digit__sel-ring' />}
                                                 </div>
                                             );
                                         })}
+                                    </div>
+                                    <div className='bbt-digits__legend'>
+                                        <span className='bbt-digits__legend-item'><span className='bbt-digits__legend-dot' style={{ background: RANK_COLORS.most }} />Most</span>
+                                        <span className='bbt-digits__legend-item'><span className='bbt-digits__legend-dot' style={{ background: RANK_COLORS.second }} />2nd Most</span>
+                                        <span className='bbt-digits__legend-item'><span className='bbt-digits__legend-dot' style={{ background: RANK_COLORS.secondLast }} />2nd Least</span>
+                                        <span className='bbt-digits__legend-item'><span className='bbt-digits__legend-dot' style={{ background: RANK_COLORS.least }} />Least</span>
                                     </div>
                                 </div>
 
