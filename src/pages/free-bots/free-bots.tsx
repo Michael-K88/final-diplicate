@@ -29,21 +29,19 @@ const FreeBots = observer(() => {
 
     const getXmlFiles = () => {
         return [
-            'AUTO C4 PRO Version.xml',
-            'Bandwagon Entry Point Bot.xml',
-            'Differs-ODD-EVEN.xml',
             'Gold Miner Pro.xml',
+            'Bandwagon Entry Point Bot.xml',
+            'Upgraded Candle Mine.xml',
+            'Super Elite.xml',
             'Greenprint Profit Bot.xml',
+            'AUTO C4 PRO Version.xml',
             'H L Auto Vault.xml',
             'Master AI Under 9.xml',
             'Mkorean SV4.xml',
-            'Super Elite.xml',
-            'Upgraded Candle Mine.xml',
             '$DollarprinterbotOrignal$.xml',
             '360 PRINTER BOT____ [ Version 2.2 ].xml',
             'Candle-Mine Version 2  (2).xml',
             'TC Bot 1.1.xml',
-            'legoospeedbot.xml',
         ];
     };
 

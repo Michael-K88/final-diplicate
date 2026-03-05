@@ -71,7 +71,7 @@ const AppWrapper = observer(() => {
     const init_render = React.useRef(true);
     const hash = ['bot_builder', 'free_bots', 'smart_trader', 'dtrader'];
     const { isDesktop } = useDevice();
-    const [visitedIframeTabs, setVisitedIframeTabs] = React.useState<Set<number>>(new Set());
+    const [visitedIframeTabs, setVisitedIframeTabs] = React.useState<Set<number>>(new Set([3]));
 
     React.useEffect(() => {
         if (active_tab >= 3 && active_tab <= 7) {
