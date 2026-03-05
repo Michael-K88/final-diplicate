@@ -1,48 +1,43 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import './batch-trader.scss';
 
 const APP_ID = 128207;
 const WS_URL = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`;
 
 const MARKETS = [
-    { label: 'Volatility 10 (1s)', symbol: '1HZ10V' },
+    { label: 'Volatility 10 (1s) Index', symbol: '1HZ10V' },
     { label: 'Volatility 10 Index', symbol: 'R_10' },
-    { label: 'Volatility 15 (1s)', symbol: '1HZ15V' },
-    { label: 'Volatility 25 (1s)', symbol: '1HZ25V' },
+    { label: 'Volatility 15 (1s) Index', symbol: '1HZ15V' },
+    { label: 'Volatility 25 (1s) Index', symbol: '1HZ25V' },
     { label: 'Volatility 25 Index', symbol: 'R_25' },
-    { label: 'Volatility 30 (1s)', symbol: '1HZ30V' },
-    { label: 'Volatility 50 (1s)', symbol: '1HZ50V' },
+    { label: 'Volatility 30 (1s) Index', symbol: '1HZ30V' },
+    { label: 'Volatility 50 (1s) Index', symbol: '1HZ50V' },
     { label: 'Volatility 50 Index', symbol: 'R_50' },
-    { label: 'Volatility 75 (1s)', symbol: '1HZ75V' },
+    { label: 'Volatility 75 (1s) Index', symbol: '1HZ75V' },
     { label: 'Volatility 75 Index', symbol: 'R_75' },
-    { label: 'Volatility 90 (1s)', symbol: '1HZ90V' },
-    { label: 'Volatility 100 (1s)', symbol: '1HZ100V' },
+    { label: 'Volatility 90 (1s) Index', symbol: '1HZ90V' },
+    { label: 'Volatility 100 (1s) Index', symbol: '1HZ100V' },
     { label: 'Volatility 100 Index', symbol: 'R_100' },
 ];
 
 const CONTRACT_GROUPS = [
-    { label: 'Odd/Even', value: 'odd_even' },
-    { label: 'Over/Under', value: 'over_under' },
-    { label: 'Matches/Differs', value: 'matches_differs' },
-    { label: 'Rise/Fall', value: 'rise_fall' },
+    { label: 'Odd/Even', value: 'odd_even', icon: '🎲' },
+    { label: 'Over/Under', value: 'over_under', icon: '📊' },
+    { label: 'Matches/Differs', value: 'matches_differs', icon: '🎯' },
+    { label: 'Rise/Fall', value: 'rise_fall', icon: '📈' },
 ];
 
-const CONTRACT_MAP: Record<string, { a: string; b: string; aLabel: string; bLabel: string }> = {
-    odd_even: { a: 'DIGITODD', b: 'DIGITEVEN', aLabel: 'Odd', bLabel: 'Even' },
-    over_under: { a: 'DIGITOVER', b: 'DIGITUNDER', aLabel: 'Over', bLabel: 'Under' },
-    matches_differs: { a: 'DIGITMATCH', b: 'DIGITDIFF', aLabel: 'Matches', bLabel: 'Differs' },
-    rise_fall: { a: 'CALL', b: 'PUT', aLabel: 'Rise', bLabel: 'Fall' },
+const CONTRACT_MAP: Record<string, { a: string; b: string; aLabel: string; bLabel: string; aIcon: string; bIcon: string }> = {
+    odd_even: { a: 'DIGITODD', b: 'DIGITEVEN', aLabel: 'Odd', bLabel: 'Even', aIcon: '⬆', bIcon: '⬇' },
+    over_under: { a: 'DIGITOVER', b: 'DIGITUNDER', aLabel: 'Over', bLabel: 'Under', aIcon: '⬆', bIcon: '⬇' },
+    matches_differs: { a: 'DIGITMATCH', b: 'DIGITDIFF', aLabel: 'Matches', bLabel: 'Differs', aIcon: '⬆', bIcon: '⬇' },
+    rise_fall: { a: 'CALL', b: 'PUT', aLabel: 'Rise', bLabel: 'Fall', aIcon: '⬆', bIcon: '⬇' },
 };
 
 const DIGIT_COLORS = [
-    '#6366f1', '#8b5cf6', '#a855f7', '#ec4899', '#f43f5e',
-    '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6',
+    '#2563eb', '#eab308', '#6366f1', '#f97316', '#64748b',
+    '#8b5cf6', '#14b8a6', '#3b82f6', '#ef4444', '#22c55e',
 ];
-
-const TYPE_LABELS: Record<string, string> = {
-    DIGITODD: 'Odd', DIGITEVEN: 'Even', DIGITOVER: 'Over', DIGITUNDER: 'Under',
-    DIGITMATCH: 'Matches', DIGITDIFF: 'Differs', CALL: 'Rise', PUT: 'Fall',
-};
 
 const requiresBarrier = (type: string) =>
     ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(type);
@@ -57,22 +52,30 @@ interface Trade {
     time: string;
 }
 
+const NAV_ITEMS = [
+    { id: 'trade', icon: '📊', label: 'Trade' },
+    { id: 'stats', icon: '📈', label: 'Stats' },
+    { id: 'log', icon: '📋', label: 'Log' },
+    { id: 'risk', icon: '🛡️', label: 'Risk' },
+];
+
 const BatchTrader: React.FC = () => {
     const [token, setToken] = useState('');
     const [isConnected, setIsConnected] = useState(false);
     const [isAuthorized, setIsAuthorized] = useState(false);
     const [connectError, setConnectError] = useState('');
+    const [activeNav, setActiveNav] = useState('trade');
 
     const [balance, setBalance] = useState(0);
     const [currency, setCurrency] = useState('USD');
     const [loginId, setLoginId] = useState('');
 
-    const [market, setMarket] = useState(MARKETS[12].symbol);
-    const [contractGroup, setContractGroup] = useState('matches_differs');
+    const [market, setMarket] = useState(MARKETS[0].symbol);
+    const [contractGroup, setContractGroup] = useState('over_under');
     const [duration, setDuration] = useState(1);
     const [stake, setStake] = useState(0.5);
     const [bulkCount, setBulkCount] = useState(1);
-    const [prediction, setPrediction] = useState<number>(5);
+    const [prediction, setPrediction] = useState<number>(1);
     const [delayMs, setDelayMs] = useState(500);
 
     const [currentTick, setCurrentTick] = useState('');
@@ -401,230 +404,303 @@ const BatchTrader: React.FC = () => {
         return digit >= 0 && digit <= 9;
     }, []);
 
+    const aPercent = digitFreqs.length && showPrediction
+        ? (contractGroup === 'over_under'
+            ? digitFreqs.slice(prediction + 1).reduce((a, b) => a + b, 0).toFixed(0)
+            : digitFreqs[prediction]?.toFixed(0) || '0')
+        : '50';
+    const bPercent = digitFreqs.length && showPrediction
+        ? (contractGroup === 'over_under'
+            ? digitFreqs.slice(0, prediction).reduce((a, b) => a + b, 0).toFixed(0)
+            : (100 - (digitFreqs[prediction] || 0)).toFixed(0))
+        : '50';
+
+    const TYPE_LABELS: Record<string, string> = {
+        DIGITODD: 'Odd', DIGITEVEN: 'Even', DIGITOVER: 'Over', DIGITUNDER: 'Under',
+        DIGITMATCH: 'Matches', DIGITDIFF: 'Differs', CALL: 'Rise', PUT: 'Fall',
+    };
+
     return (
-        <div className='bt'>
-            <div className='bt-conn'>
-                <div className='bt-conn__left'>
-                    <div className={`bt-conn__dot ${isAuthorized ? 'bt-conn__dot--ok' : isConnected ? 'bt-conn__dot--pending' : ''}`} />
-                    <span className='bt-conn__label'>
-                        {isAuthorized ? `${loginId} | ${balance.toFixed(2)} ${currency}` : isConnected ? 'Authenticating...' : 'Disconnected'}
-                    </span>
+        <div className='bbt'>
+            <nav className='bbt-nav'>
+                {NAV_ITEMS.map(item => (
+                    <button
+                        key={item.id}
+                        className={`bbt-nav__item ${activeNav === item.id ? 'bbt-nav__item--active' : ''}`}
+                        onClick={() => setActiveNav(item.id)}
+                        title={item.label}
+                    >
+                        <span className='bbt-nav__icon'>{item.icon}</span>
+                        <span className='bbt-nav__label'>{item.label}</span>
+                    </button>
+                ))}
+                <div className='bbt-nav__spacer' />
+                <div className={`bbt-nav__status ${isAuthorized ? 'bbt-nav__status--ok' : ''}`} />
+            </nav>
+
+            <div className='bbt-main'>
+                <div className='bbt-header'>
+                    <div className='bbt-header__left'>
+                        <span className='bbt-header__accent' />
+                        <div>
+                            <h1 className='bbt-header__title'>Batch Buying Tool</h1>
+                            <p className='bbt-header__sub'>Execute strategic bulk trades with advanced prediction analysis</p>
+                        </div>
+                    </div>
+                    <div className='bbt-header__right'>
+                        {!isAuthorized ? (
+                            <div className='bbt-auth'>
+                                <input
+                                    type='password'
+                                    className='bbt-auth__input'
+                                    placeholder='Enter Deriv API Token'
+                                    value={token}
+                                    onChange={e => setToken(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && connect()}
+                                />
+                                <button className='bbt-auth__btn' onClick={connect} disabled={isConnected}>
+                                    {isConnected ? 'Connecting...' : 'Connect'}
+                                </button>
+                            </div>
+                        ) : (
+                            <div className='bbt-auth'>
+                                <span className='bbt-auth__info'>{loginId} • {balance.toFixed(2)} {currency}</span>
+                                <button className='bbt-auth__btn bbt-auth__btn--dc' onClick={disconnect}>Disconnect</button>
+                            </div>
+                        )}
+                        {connectError && <span className='bbt-auth__error'>{connectError}</span>}
+                    </div>
                 </div>
-                <div className='bt-conn__right'>
-                    {!isAuthorized ? (
-                        <>
-                            <input
-                                type='password'
-                                className='bt-conn__input'
-                                placeholder='Enter Deriv API Token'
-                                value={token}
-                                onChange={e => setToken(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && connect()}
-                            />
-                            <button className='bt-conn__btn' onClick={connect} disabled={isConnected}>
-                                Connect
-                            </button>
-                        </>
-                    ) : (
-                        <button className='bt-conn__btn bt-conn__btn--dc' onClick={disconnect}>
-                            Disconnect
-                        </button>
-                    )}
-                </div>
-                {connectError && <div className='bt-conn__error'>{connectError}</div>}
-            </div>
 
-            <div className='bt-dash'>
-                <div className='bt-left'>
-                    <div className='bt-card'>
-                        <h3 className='bt-card__title'>{currentContract.aLabel} / {currentContract.bLabel}</h3>
+                <div className='bbt-body'>
+                    {activeNav === 'trade' && (
+                        <div className='bbt-trade'>
+                            <div className='bbt-card'>
+                                <h2 className='bbt-card__heading'>{currentContract.aLabel}/{currentContract.bLabel}</h2>
 
-                        <div className='bt-field'>
-                            <label className='bt-field__label'>Select Market</label>
-                            <select className='bt-field__select' value={market} onChange={e => setMarket(e.target.value)}>
-                                {MARKETS.map(m => <option key={m.symbol} value={m.symbol}>{m.label}</option>)}
-                            </select>
-                        </div>
+                                <label className='bbt-label'>Select Market</label>
+                                <select className='bbt-select' value={market} onChange={e => setMarket(e.target.value)}>
+                                    {MARKETS.map(m => <option key={m.symbol} value={m.symbol}>{m.label}</option>)}
+                                </select>
 
-                        <div className='bt-field'>
-                            <label className='bt-field__label'>Contract Type</label>
-                            <select className='bt-field__select' value={contractGroup} onChange={e => setContractGroup(e.target.value)}>
-                                {CONTRACT_GROUPS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
-                            </select>
-                        </div>
+                                <label className='bbt-label'>Contract Type</label>
+                                <select className='bbt-select' value={contractGroup} onChange={e => setContractGroup(e.target.value)}>
+                                    {CONTRACT_GROUPS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+                                </select>
 
-                        <div className='bt-row'>
-                            <div className='bt-field'>
-                                <label className='bt-field__label'>Ticks</label>
-                                <input type='number' className='bt-field__input' value={duration} min={1} max={10}
-                                    onChange={e => setDuration(parseInt(e.target.value) || 1)} />
-                            </div>
-                            <div className='bt-field'>
-                                <label className='bt-field__label'>Stake</label>
-                                <input type='number' className='bt-field__input' value={stake} min={0.35} step={0.01}
-                                    onChange={e => setStake(parseFloat(e.target.value) || 0.35)} />
-                            </div>
-                            <div className='bt-field'>
-                                <label className='bt-field__label'>No. of Bulk Trades</label>
-                                <input type='number' className='bt-field__input' value={bulkCount} min={1} max={100}
-                                    onChange={e => setBulkCount(parseInt(e.target.value) || 1)} />
-                            </div>
-                        </div>
-
-                        {showPrediction && (
-                            <div className='bt-field'>
-                                <label className='bt-field__label'>Select Prediction Digit</label>
-                                <div className='bt-pred'>
-                                    {Array.from({ length: 10 }, (_, i) => (
-                                        <button
-                                            key={i}
-                                            className={`bt-pred__btn ${prediction === i ? 'bt-pred__btn--active' : ''}`}
-                                            style={{ '--dc': DIGIT_COLORS[i] } as React.CSSProperties}
-                                            onClick={() => setPrediction(i)}
-                                        >
-                                            {i}
-                                        </button>
-                                    ))}
+                                <div className='bbt-row3'>
+                                    <div>
+                                        <label className='bbt-label'>Ticks</label>
+                                        <input type='number' className='bbt-input' value={duration} min={1} max={10}
+                                            onChange={e => setDuration(parseInt(e.target.value) || 1)} />
+                                    </div>
+                                    <div>
+                                        <label className='bbt-label'>Stake</label>
+                                        <input type='number' className='bbt-input' value={stake} min={0.35} step={0.01}
+                                            onChange={e => setStake(parseFloat(e.target.value) || 0.35)} />
+                                    </div>
+                                    <div>
+                                        <label className='bbt-label'>No. of Bulk Trades</label>
+                                        <input type='number' className='bbt-input' value={bulkCount} min={1} max={100}
+                                            onChange={e => setBulkCount(parseInt(e.target.value) || 1)} />
+                                    </div>
                                 </div>
-                            </div>
-                        )}
 
-                        <div className='bt-row'>
-                            <div className='bt-field'>
-                                <label className='bt-field__label'>Delay (ms)</label>
-                                <input type='number' className='bt-field__input' value={delayMs} min={0} step={100}
-                                    onChange={e => setDelayMs(parseInt(e.target.value) || 0)} />
-                            </div>
-                            <div className='bt-field'>
-                                <label className='bt-field__label'>Stop Loss</label>
-                                <input type='number' className='bt-field__input' value={stopLoss} min={0} step={0.5}
-                                    onChange={e => setStopLoss(parseFloat(e.target.value) || 0)} />
-                            </div>
-                            <div className='bt-field'>
-                                <label className='bt-field__label'>Take Profit</label>
-                                <input type='number' className='bt-field__input' value={takeProfit} min={0} step={0.5}
-                                    onChange={e => setTakeProfit(parseFloat(e.target.value) || 0)} />
-                            </div>
-                        </div>
+                                {showPrediction && (
+                                    <>
+                                        <label className='bbt-label'>Select Prediction Digit</label>
+                                        <input
+                                            type='number'
+                                            className='bbt-input bbt-input--pred'
+                                            value={prediction}
+                                            min={0}
+                                            max={9}
+                                            onChange={e => setPrediction(Math.max(0, Math.min(9, parseInt(e.target.value) || 0)))}
+                                        />
+                                    </>
+                                )}
 
-                        {currentTick && (
-                            <div className='bt-tick'>
-                                <span className='bt-tick__label'>Current Tick:</span>
-                                <span className='bt-tick__price'>
-                                    {currentTick.slice(0, -1)}
-                                    <span className='bt-tick__digit' style={{ color: DIGIT_COLORS[lastDigit || 0] }}>
-                                        {currentTick.slice(-1)}
-                                    </span>
-                                </span>
-                            </div>
-                        )}
-
-                        <div className='bt-dstats'>
-                            <h4 className='bt-dstats__title'>Digit Statistics (Last {tickCount} ticks)</h4>
-                            <div className='bt-dstats__grid'>
-                                {digitFreqs.map((freq, i) => (
-                                    <div key={i} className={`bt-dstat ${lastDigit === i ? 'bt-dstat--active' : ''} ${prediction === i && showPrediction ? 'bt-dstat--sel' : ''}`}>
-                                        <div className='bt-dstat__circle' style={{ borderColor: DIGIT_COLORS[i], boxShadow: lastDigit === i ? `0 0 10px ${DIGIT_COLORS[i]}` : 'none' }}>
-                                            <span className='bt-dstat__num'>{i}</span>
-                                        </div>
-                                        <span className='bt-dstat__pct' style={{ color: DIGIT_COLORS[i] }}>{freq}%</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className='bt-actions'>
-                            {isExecuting ? (
-                                <>
-                                    <div className='bt-actions__progress'>
-                                        <div className='bt-actions__spinner' />
-                                        Executing {batchProgress.current} / {batchProgress.total}
-                                    </div>
-                                    <button className='bt-actions__btn bt-actions__btn--stop' onClick={stopBatch}>
-                                        Stop Batch
-                                    </button>
-                                </>
-                            ) : (
-                                <>
-                                    <button
-                                        className='bt-actions__btn bt-actions__btn--a'
-                                        onClick={() => executeBatch(currentContract.a)}
-                                        disabled={!isAuthorized || (requiresBarrier(currentContract.a) && !isDigitValid(prediction, currentContract.a))}
-                                    >
-                                        ★ {currentContract.aLabel}
-                                    </button>
-                                    <button
-                                        className='bt-actions__btn bt-actions__btn--b'
-                                        onClick={() => executeBatch(currentContract.b)}
-                                        disabled={!isAuthorized || (requiresBarrier(currentContract.b) && !isDigitValid(prediction, currentContract.b))}
-                                    >
-                                        ★ {currentContract.bLabel}
-                                    </button>
-                                </>
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                <div className='bt-right'>
-                    <div className='bt-info'>
-                        <div className='bt-info__card'>
-                            <span className='bt-info__label'>Balance</span>
-                            <span className='bt-info__value'>{balance.toFixed(2)} {currency}</span>
-                        </div>
-                        <div className='bt-info__card'>
-                            <span className='bt-info__label'>Total P/L</span>
-                            <span className={`bt-info__value ${totalPnL >= 0 ? 'bt-info__value--profit' : 'bt-info__value--loss'}`}>
-                                {totalPnL >= 0 ? '+' : ''}{totalPnL.toFixed(2)}
-                            </span>
-                        </div>
-                        <div className='bt-info__card'>
-                            <span className='bt-info__label'>Win Rate</span>
-                            <span className='bt-info__value'>{winRate}%</span>
-                        </div>
-                        <div className='bt-info__card bt-info__card--split'>
-                            <div>
-                                <span className='bt-info__label'>Wins</span>
-                                <span className='bt-info__value bt-info__value--profit'>{wins}</span>
-                            </div>
-                            <div>
-                                <span className='bt-info__label'>Losses</span>
-                                <span className='bt-info__value bt-info__value--loss'>{losses}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className='bt-log'>
-                        <div className='bt-log__header'>
-                            <h4 className='bt-log__title'>Trade Log ({trades.length})</h4>
-                            <button className='bt-log__clear' onClick={resetStats}>Clear All</button>
-                        </div>
-                        <div className='bt-log__list'>
-                            {trades.length === 0 && (
-                                <div className='bt-log__empty'>No trades yet. Connect and configure to start batch trading.</div>
-                            )}
-                            {trades.map((trade, idx) => (
-                                <div key={`${trade.id}-${idx}`} className={`bt-log__item bt-log__item--${trade.status}`}>
-                                    <div className='bt-log__item-left'>
-                                        <span className={`bt-log__item-badge bt-log__item-badge--${trade.status}`}>
-                                            {trade.status === 'pending' ? '⏳' : trade.status === 'won' ? '✓' : trade.status === 'lost' ? '✗' : '!'}
+                                {currentTick && (
+                                    <div className='bbt-curtick'>
+                                        <span className='bbt-curtick__label'>Current Tick:</span>
+                                        <span className='bbt-curtick__val'>
+                                            {currentTick.slice(0, -1)}
+                                            <span className='bbt-curtick__digit' style={{ color: DIGIT_COLORS[lastDigit || 0] }}>
+                                                {currentTick.slice(-1)}
+                                            </span>
                                         </span>
-                                        <div>
-                                            <span className='bt-log__item-type'>{TYPE_LABELS[trade.contractType] || trade.contractType}</span>
-                                            <span className='bt-log__item-time'>{trade.time}</span>
-                                        </div>
                                     </div>
-                                    <div className='bt-log__item-right'>
-                                        <span className='bt-log__item-stake'>-{trade.buyPrice.toFixed(2)}</span>
-                                        {trade.status === 'pending' && <span className='bt-log__item-pending'>Pending...</span>}
-                                        {trade.status === 'won' && <span className='bt-log__item-profit'>+{trade.profit.toFixed(2)}</span>}
-                                        {trade.status === 'lost' && <span className='bt-log__item-loss'>{trade.profit.toFixed(2)}</span>}
-                                        {trade.status === 'error' && <span className='bt-log__item-err'>{trade.error}</span>}
+                                )}
+
+                                <div className='bbt-digits'>
+                                    <h4 className='bbt-digits__title'>Digit Statistics (Last {tickCount} ticks)</h4>
+                                    <div className='bbt-digits__grid'>
+                                        {digitFreqs.map((freq, i) => {
+                                            const isActive = lastDigit === i;
+                                            const isSelected = prediction === i && showPrediction;
+                                            const pct = freq || 0;
+                                            const circumference = 2 * Math.PI * 22;
+                                            const dashOffset = circumference - (circumference * pct / 100);
+                                            return (
+                                                <div
+                                                    key={i}
+                                                    className={`bbt-digit ${isActive ? 'bbt-digit--active' : ''} ${isSelected ? 'bbt-digit--sel' : ''}`}
+                                                    onClick={() => showPrediction && setPrediction(i)}
+                                                >
+                                                    <svg className='bbt-digit__ring' viewBox='0 0 50 50'>
+                                                        <circle cx='25' cy='25' r='22' fill='none' stroke='#e5e7eb' strokeWidth='3' />
+                                                        <circle
+                                                            cx='25' cy='25' r='22' fill='none'
+                                                            stroke={DIGIT_COLORS[i]}
+                                                            strokeWidth='3'
+                                                            strokeDasharray={circumference}
+                                                            strokeDashoffset={dashOffset}
+                                                            strokeLinecap='round'
+                                                            transform='rotate(-90 25 25)'
+                                                        />
+                                                    </svg>
+                                                    <div className='bbt-digit__inner'>
+                                                        <span className='bbt-digit__num'>{i}</span>
+                                                        <span className='bbt-digit__pct' style={{ color: DIGIT_COLORS[i] }}>{freq}%</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
-                            ))}
+
+                                <div className='bbt-actions'>
+                                    {isExecuting ? (
+                                        <>
+                                            <div className='bbt-actions__progress'>
+                                                <div className='bbt-actions__spinner' />
+                                                Executing {batchProgress.current} / {batchProgress.total}
+                                            </div>
+                                            <button className='bbt-actions__stop' onClick={stopBatch}>Stop</button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <button
+                                                className='bbt-actions__btn bbt-actions__btn--a'
+                                                onClick={() => executeBatch(currentContract.a)}
+                                                disabled={!isAuthorized || (requiresBarrier(currentContract.a) && !isDigitValid(prediction, currentContract.a))}
+                                            >
+                                                <span className='bbt-actions__btn-icon'>{currentContract.aIcon}</span>
+                                                <span className='bbt-actions__btn-label'>{currentContract.aLabel} {showPrediction ? prediction : ''}</span>
+                                                <span className='bbt-actions__btn-pct'>{aPercent}%</span>
+                                            </button>
+                                            <button
+                                                className='bbt-actions__btn bbt-actions__btn--b'
+                                                onClick={() => executeBatch(currentContract.b)}
+                                                disabled={!isAuthorized || (requiresBarrier(currentContract.b) && !isDigitValid(prediction, currentContract.b))}
+                                            >
+                                                <span className='bbt-actions__btn-icon'>{currentContract.bIcon}</span>
+                                                <span className='bbt-actions__btn-label'>{currentContract.bLabel} {showPrediction ? prediction : ''}</span>
+                                                <span className='bbt-actions__btn-pct'>{bPercent}%</span>
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    )}
+
+                    {activeNav === 'stats' && (
+                        <div className='bbt-stats-panel'>
+                            <div className='bbt-card'>
+                                <h2 className='bbt-card__heading'>Trading Statistics</h2>
+                                <div className='bbt-stats-grid'>
+                                    <div className='bbt-stat-card'>
+                                        <span className='bbt-stat-card__label'>Balance</span>
+                                        <span className='bbt-stat-card__value'>{balance.toFixed(2)} {currency}</span>
+                                    </div>
+                                    <div className='bbt-stat-card'>
+                                        <span className='bbt-stat-card__label'>Total P/L</span>
+                                        <span className={`bbt-stat-card__value ${totalPnL >= 0 ? 'bbt-stat-card__value--green' : 'bbt-stat-card__value--red'}`}>
+                                            {totalPnL >= 0 ? '+' : ''}{totalPnL.toFixed(2)}
+                                        </span>
+                                    </div>
+                                    <div className='bbt-stat-card'>
+                                        <span className='bbt-stat-card__label'>Win Rate</span>
+                                        <span className='bbt-stat-card__value'>{winRate}%</span>
+                                    </div>
+                                    <div className='bbt-stat-card'>
+                                        <span className='bbt-stat-card__label'>Wins / Losses</span>
+                                        <span className='bbt-stat-card__value'>
+                                            <span className='bbt-stat-card__value--green'>{wins}</span>
+                                            {' / '}
+                                            <span className='bbt-stat-card__value--red'>{losses}</span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeNav === 'log' && (
+                        <div className='bbt-log-panel'>
+                            <div className='bbt-card'>
+                                <div className='bbt-log-header'>
+                                    <h2 className='bbt-card__heading'>Trade Log</h2>
+                                    <button className='bbt-log-clear' onClick={resetStats}>Clear All</button>
+                                </div>
+                                <div className='bbt-log-list'>
+                                    {trades.length === 0 ? (
+                                        <div className='bbt-log-empty'>No trades yet. Execute a batch to see results here.</div>
+                                    ) : (
+                                        trades.map((t) => (
+                                            <div key={t.id} className={`bbt-log-item bbt-log-item--${t.status}`}>
+                                                <div className='bbt-log-item__left'>
+                                                    <span className={`bbt-log-item__badge bbt-log-item__badge--${t.status}`}>
+                                                        {t.status === 'won' ? '✓' : t.status === 'lost' ? '✗' : t.status === 'error' ? '!' : '⏳'}
+                                                    </span>
+                                                    <div>
+                                                        <span className='bbt-log-item__type'>{TYPE_LABELS[t.contractType] || t.contractType}</span>
+                                                        <span className='bbt-log-item__time'>{t.time}</span>
+                                                    </div>
+                                                </div>
+                                                <div className='bbt-log-item__right'>
+                                                    <span className='bbt-log-item__stake'>${t.buyPrice.toFixed(2)}</span>
+                                                    {t.status === 'won' && <span className='bbt-log-item__profit'>+{t.profit.toFixed(2)}</span>}
+                                                    {t.status === 'lost' && <span className='bbt-log-item__loss'>{t.profit.toFixed(2)}</span>}
+                                                    {t.status === 'pending' && <span className='bbt-log-item__pending'>Pending</span>}
+                                                    {t.status === 'error' && <span className='bbt-log-item__err'>{t.error}</span>}
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeNav === 'risk' && (
+                        <div className='bbt-risk-panel'>
+                            <div className='bbt-card'>
+                                <h2 className='bbt-card__heading'>Risk Management</h2>
+                                <div className='bbt-risk-grid'>
+                                    <div>
+                                        <label className='bbt-label'>Stop Loss</label>
+                                        <input type='number' className='bbt-input' value={stopLoss} min={0} step={0.5}
+                                            onChange={e => setStopLoss(parseFloat(e.target.value) || 0)} />
+                                        <span className='bbt-risk-hint'>Trading stops when total loss reaches this amount (0 = disabled)</span>
+                                    </div>
+                                    <div>
+                                        <label className='bbt-label'>Take Profit</label>
+                                        <input type='number' className='bbt-input' value={takeProfit} min={0} step={0.5}
+                                            onChange={e => setTakeProfit(parseFloat(e.target.value) || 0)} />
+                                        <span className='bbt-risk-hint'>Trading stops when total profit reaches this amount (0 = disabled)</span>
+                                    </div>
+                                    <div>
+                                        <label className='bbt-label'>Delay Between Trades (ms)</label>
+                                        <input type='number' className='bbt-input' value={delayMs} min={0} step={100}
+                                            onChange={e => setDelayMs(parseInt(e.target.value) || 0)} />
+                                        <span className='bbt-risk-hint'>Milliseconds to wait between each trade in a batch</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

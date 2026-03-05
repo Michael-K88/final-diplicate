@@ -4,6 +4,7 @@
 A React-based trading bot builder application (Deriv Bot) that allows users to create automated trading strategies using a visual block-based editor (Blockly). Built with TypeScript, React 18, and rsbuild as the build tool.
 
 ## Recent Changes
+- 2026-03-05: Batch Trader UI completely redesigned - clean white card layout with vertical nav sidebar (Trade/Stats/Log/Risk sections), SVG circular digit ring charts for statistics, gradient action buttons (green/red) showing live percentages. CSS class prefix changed from `bt` to `bbt`. Light background (#f3f4f6), white cards with subtle shadows, centered single-column form layout matching reference design.
 - 2026-03-05: DTrader iframe now preloads on app mount (pre-added to visitedIframeTabs) so it starts loading immediately instead of waiting for user to click the tab. Significantly faster first load.
 - 2026-03-05: Free Bots reordered and cleaned up. Removed: Differs-ODD-EVEN, legoospeedbot. New order: Gold Miner Pro, Bandwagon Entry Point Bot, Upgraded Candle Mine, Super Elite, Greenprint Profit Bot, then remaining bots. Updated both bots.json manifest and hardcoded fallback list.
 - 2026-03-05: Batch Trader moved to tab bar after DTrader (tab index 4). Removed separate route/header nav button. Tab order: Bot Builder(0), Free Bots(1), Smart Trader(2), DTrader(3), Batch Trader(4), TradingView(5), Analysis Tool(6), Signals(7). Persistent panel pattern maintained.
