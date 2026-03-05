@@ -179,15 +179,45 @@ const BatchTrader: React.FC = () => {
         setLastDigit(null);
         setTickCount(0);
 
+        let historyLoaded = false;
+
         const ws = new WebSocket(WS_URL);
 
         ws.onopen = () => {
-            ws.send(JSON.stringify({ ticks: market, subscribe: 1 }));
+            ws.send(JSON.stringify({
+                ticks_history: market,
+                count: 1000,
+                end: 'latest',
+                style: 'ticks',
+            }));
         };
 
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            if (data.msg_type === 'tick' && data.tick) {
+
+            if (data.msg_type === 'history' && data.history) {
+                const prices = data.history.prices || [];
+                const digits = prices.map((p: number) => {
+                    const priceStr = p.toString();
+                    return parseInt(priceStr.slice(-1));
+                });
+                digitHistoryRef.current = digits;
+                setTickCount(digits.length);
+                const counts = Array(10).fill(0);
+                digits.forEach((d: number) => counts[d]++);
+                const total = digits.length || 1;
+                setDigitFreqs(counts.map((c: number) => parseFloat(((c / total) * 100).toFixed(1))));
+                if (prices.length > 0) {
+                    const lastPrice = prices[prices.length - 1].toString();
+                    const lastD = parseInt(lastPrice.slice(-1));
+                    setCurrentTick(lastPrice);
+                    setLastDigit(lastD);
+                }
+                historyLoaded = true;
+                ws.send(JSON.stringify({ ticks: market, subscribe: 1 }));
+            }
+
+            if (data.msg_type === 'tick' && data.tick && historyLoaded) {
                 handleTickRef.current?.(data.tick);
             }
         };
