@@ -1,7 +1,6 @@
 import { useCallback, useRef } from 'react';
 import clsx from 'clsx';
 import { observer } from 'mobx-react-lite';
-import { useLocation, useNavigate } from 'react-router-dom';
 import { generateOAuthURL, standalone_routes } from '@/components/shared';
 import Button from '@/components/shared_ui/button';
 import useActiveAccount from '@/hooks/api/account/useActiveAccount';
@@ -30,9 +29,6 @@ type TAppHeaderProps = {
 const AppHeader = observer(({ isAuthenticating }: TAppHeaderProps) => {
     const { isDesktop } = useDevice();
     const { isAuthorizing, activeLoginid } = useApiBase();
-    const location = useLocation();
-    const navigate = useNavigate();
-    const isBatchTrader = location.pathname === '/batch-trader';
     const { client } = useStore() ?? {};
     const mobileMenuRef = useRef<MobileMenuRef>(null);
 
@@ -223,12 +219,6 @@ const AppHeader = observer(({ isAuthenticating }: TAppHeaderProps) => {
             <Wrapper variant='left'>
                 <AppLogo onMenuClick={handleMenuClick} />
                 <MobileMenu ref={mobileMenuRef} />
-                <button
-                    className={clsx('batch-trader-nav', { 'batch-trader-nav--active': isBatchTrader })}
-                    onClick={() => navigate({ pathname: isBatchTrader ? '/' : '/batch-trader', search: location.search })}
-                >
-                    {isBatchTrader ? 'Bot Builder' : 'Batch Trader'}
-                </button>
             </Wrapper>
             <Wrapper variant='right'>{renderAccountSection()}</Wrapper>
         </Header>

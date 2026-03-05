@@ -37,6 +37,7 @@ const AnalysisTool = lazy(() => import('../analysis-tool'));
 const Signals = lazy(() => import('../signals'));
 const SmartTrader = lazy(() => import('../smart-trader'));
 const Dtrader = lazy(() => import('../dtrader'));
+const BatchTrader = lazy(() => import('../batch-trader'));
 // Import FreeBots directly instead of lazy loading for faster access
 import FreeBots from '../free-bots';
 
@@ -73,7 +74,7 @@ const AppWrapper = observer(() => {
     const [visitedIframeTabs, setVisitedIframeTabs] = React.useState<Set<number>>(new Set());
 
     React.useEffect(() => {
-        if (active_tab >= 3 && active_tab <= 6) {
+        if (active_tab >= 3 && active_tab <= 7) {
             setVisitedIframeTabs(prev => {
                 if (prev.has(active_tab)) return prev;
                 const next = new Set(prev);
@@ -303,6 +304,19 @@ const AppWrapper = observer(() => {
                             <div
                                 label={
                                     <>
+                                        <LabelPairedChartLineCaptionRegularIcon
+                                            height='16px'
+                                            width='16px'
+                                            fill='var(--text-general)'
+                                        />
+                                        <Localize i18n_default_text='Batch Trader' />
+                                    </>
+                                }
+                                id='id-batch-trader'
+                            />
+                            <div
+                                label={
+                                    <>
                                         <LegacyChartsIcon height='16px' width='16px' fill='var(--text-general)' />
                                         <Localize i18n_default_text='TradingView' />
                                     </>
@@ -333,7 +347,7 @@ const AppWrapper = observer(() => {
                             />
                         </Tabs>
                     </div>
-                    <div className='main__iframe-tabs' style={{ display: active_tab >= 3 && active_tab <= 6 ? 'block' : 'none' }}>
+                    <div className='main__iframe-tabs' style={{ display: active_tab >= 3 && active_tab <= 7 ? 'block' : 'none' }}>
                         {visitedIframeTabs.has(3) && (
                             <div className='main__iframe-panel' style={{ display: active_tab === 3 ? 'flex' : 'none' }}>
                                 <Suspense fallback={<ChunkLoader message={localize('Please wait, loading DTrader...')} />}>
@@ -343,20 +357,27 @@ const AppWrapper = observer(() => {
                         )}
                         {visitedIframeTabs.has(4) && (
                             <div className='main__iframe-panel' style={{ display: active_tab === 4 ? 'flex' : 'none' }}>
-                                <Suspense fallback={<ChunkLoader message={localize('Please wait, loading TradingView...')} />}>
-                                    <TradingView />
+                                <Suspense fallback={<ChunkLoader message={localize('Please wait, loading Batch Trader...')} />}>
+                                    <BatchTrader />
                                 </Suspense>
                             </div>
                         )}
                         {visitedIframeTabs.has(5) && (
                             <div className='main__iframe-panel' style={{ display: active_tab === 5 ? 'flex' : 'none' }}>
-                                <Suspense fallback={<ChunkLoader message={localize('Please wait, loading Analysis Tool...')} />}>
-                                    <AnalysisTool />
+                                <Suspense fallback={<ChunkLoader message={localize('Please wait, loading TradingView...')} />}>
+                                    <TradingView />
                                 </Suspense>
                             </div>
                         )}
                         {visitedIframeTabs.has(6) && (
                             <div className='main__iframe-panel' style={{ display: active_tab === 6 ? 'flex' : 'none' }}>
+                                <Suspense fallback={<ChunkLoader message={localize('Please wait, loading Analysis Tool...')} />}>
+                                    <AnalysisTool />
+                                </Suspense>
+                            </div>
+                        )}
+                        {visitedIframeTabs.has(7) && (
+                            <div className='main__iframe-panel' style={{ display: active_tab === 7 ? 'flex' : 'none' }}>
                                 <Suspense fallback={<ChunkLoader message={localize('Please wait, loading Signals...')} />}>
                                     <Signals />
                                 </Suspense>
