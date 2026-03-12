@@ -49,7 +49,6 @@ const WS_URL = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`;
 const requiresBarrier = (type: string) =>
     ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(type);
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 interface Trade {
     id: string;
@@ -255,16 +254,15 @@ const BatchTrader: React.FC = observer(() => {
         return authorize;
     }, [client]);
 
-    const purchaseOne = useCallback(async (contractType: string): Promise<void> => {
-        const api = apiRef.current;
-        if (!api) throw new Error('API not initialized');
-
+    // ---------------------------------------------------------------------------
+    // Core buy helper: proposal → buy for ONE contract. Returns buy response.
+    // Called N times concurrently so all contracts land on the same tick.
+    // ---------------------------------------------------------------------------
+    const buyOne = useCallback(async (contractType: string, api: any) => {
         const needBarrier = requiresBarrier(contractType);
-        const cur = currencyRef.current;
         const stakeVal = Math.max(0.35, parseFloat(stakeStr) || 0.35);
-        const loginid = loginIdRef.current;
+        const cur = currencyRef.current;
 
-        // Step 1: Get proposal
         const proposalReq: any = {
             proposal: 1,
             amount: stakeVal,
@@ -281,7 +279,6 @@ const BatchTrader: React.FC = observer(() => {
         if (proposalRes.error) throw new Error(proposalRes.error.message || 'Proposal failed');
         if (!proposalRes.proposal?.id) throw new Error('No proposal returned from API');
 
-        // Step 2: Buy the contract
         const buyRes = await api.send({
             buy: proposalRes.proposal.id,
             price: proposalRes.proposal.ask_price,
@@ -289,99 +286,68 @@ const BatchTrader: React.FC = observer(() => {
         if (buyRes.error) throw new Error(buyRes.error.message || 'Buy failed');
         if (!buyRes.buy?.contract_id) throw new Error('No contract_id in buy response');
 
-        const buy = buyRes.buy;
-        const contractId = String(buy.contract_id);
-        const tradeTime = new Date().toLocaleTimeString();
+        return buyRes.buy;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [market, duration, stakeStr, prediction]);
 
-        // Add pending entry to our local log UI only
-        const trade: Trade = {
-            id: contractId,
-            contractType,
-            buyPrice: parseFloat(buy.buy_price),
-            status: 'pending',
-            profit: 0,
-            time: tradeTime,
-        };
-        setTrades(prev => [trade, ...prev]);
+    // ---------------------------------------------------------------------------
+    // Settlement watcher: subscribes to a contract and resolves when it settles.
+    // ---------------------------------------------------------------------------
+    const watchSettlement = useCallback((
+        contractId: string,
+        buy: any,
+        api: any,
+        loginid: string,
+        onSettled: (poc: any) => void,
+    ): Promise<void> => {
+        return new Promise<void>((resolve) => {
+            let pocSubId: string | null = null;
+            let done = false;
 
-        // Open the right-panel drawer and set stage so Transactions panel is active
-        run_panel.toggleDrawer(true);
-        runInAction(() => {
-            run_panel.setContractStage(contract_stages.STARTING);
-        });
+            const finish = (poc: any) => {
+                if (done) return;
+                done = true;
+                api.connection?.removeEventListener?.('message', onMsg);
+                if (pocSubId) api.send({ forget: pocSubId }).catch(() => {});
+                onSettled(poc);
+                resolve();
+            };
 
-        // Settlement handler — called ONCE when the contract settles.
-        // We only push to TransactionsStore here (one push = one row, no duplicates).
-        const handleSettlement = (poc: any) => {
-            if (settledContractsRef.current.has(contractId)) return;
-            settledContractsRef.current.add(contractId);
-
-            const profit = parseFloat(poc.profit ?? '0') || 0;
-            pnlRef.current += profit;
-            setTotalPnL(pnlRef.current);
-            setTrades(prev => prev.map(t =>
-                t.id === contractId ? { ...t, status: profit >= 0 ? 'won' : 'lost', profit } : t
-            ));
-            if (profit >= 0) setWins(w => w + 1);
-            else setLosses(l => l + 1);
-            if (poc.balance_after) setBalance(parseFloat(poc.balance_after));
-
-            // Push the final settled contract into the right-panel Transactions tab (one row per trade)
-            try {
-                runInAction(() => {
-                    if (loginid && client.loginid !== loginid) client.setLoginId(loginid);
-                    transactions.onBotContractEvent(poc);
-                });
-            } catch (_) { /* ignore */ }
-
-            // Check risk limits
-            const risk = riskRef.current;
-            if (risk.stopLoss > 0 && pnlRef.current <= -risk.stopLoss) stopBatchRef.current = true;
-            if (risk.takeProfit > 0 && pnlRef.current >= risk.takeProfit) stopBatchRef.current = true;
-        };
-
-        // Subscribe to contract status updates.
-        // Listener added BEFORE send to catch fast-settling 1-tick contracts.
-        let pocSubId: string | null = null;
-
-        const onMsg = (evt: MessageEvent) => {
-            try {
-                const data = JSON.parse(evt.data as string);
-                if (data?.msg_type === 'proposal_open_contract') {
-                    const poc = data.proposal_open_contract;
-                    if (!pocSubId && data?.subscription?.id) pocSubId = data.subscription.id;
-                    if (String(poc?.contract_id || '') === contractId) {
-                        if (poc?.is_sold || poc?.status === 'sold' || poc?.is_expired) {
-                            api.connection?.removeEventListener?.('message', onMsg);
-                            if (pocSubId) api.send({ forget: pocSubId }).catch(() => {});
-                            handleSettlement(poc);
+            const onMsg = (evt: MessageEvent) => {
+                try {
+                    const data = JSON.parse(evt.data as string);
+                    if (data?.msg_type === 'proposal_open_contract') {
+                        if (!pocSubId && data?.subscription?.id) pocSubId = data.subscription.id;
+                        const poc = data.proposal_open_contract;
+                        if (String(poc?.contract_id || '') === contractId) {
+                            if (poc?.is_sold || poc?.status === 'sold' || poc?.is_expired) {
+                                finish(poc);
+                            }
                         }
                     }
-                }
-            } catch (_) { /* ignore */ }
-        };
+                } catch (_) { /* ignore */ }
+            };
 
-        api.connection?.addEventListener?.('message', onMsg);
+            // Register listener BEFORE subscribe to avoid missing fast-settling 1-tick contracts
+            api.connection?.addEventListener?.('message', onMsg);
 
-        // Subscribe to contract updates
-        try {
-            const pocRes = await api.send({
-                proposal_open_contract: 1,
-                contract_id: buy.contract_id,
-                subscribe: 1,
-            });
-            if (pocRes?.subscription?.id) pocSubId = pocRes.subscription.id;
-            if (pocRes?.proposal_open_contract) {
-                const poc = pocRes.proposal_open_contract;
-                if (poc?.is_sold || poc?.status === 'sold' || poc?.is_expired) {
-                    api.connection?.removeEventListener?.('message', onMsg);
-                    if (pocSubId) api.send({ forget: pocSubId }).catch(() => {});
-                    handleSettlement(poc);
-                }
-            }
-        } catch (_) { /* ignore POC subscribe errors, settlement will still come via listener */ }
+            api.send({ proposal_open_contract: 1, contract_id: buy.contract_id, subscribe: 1 })
+                .then((pocRes: any) => {
+                    if (pocRes?.subscription?.id) pocSubId = pocRes.subscription.id;
+                    if (pocRes?.proposal_open_contract) {
+                        const poc = pocRes.proposal_open_contract;
+                        if (poc?.is_sold || poc?.status === 'sold' || poc?.is_expired) {
+                            finish(poc);
+                        }
+                    }
+                })
+                .catch(() => { /* listener still running */ });
+
+            // Safety timeout — resolve after 90 s even if no settlement arrives
+            setTimeout(() => { if (!done) { done = true; api.connection?.removeEventListener?.('message', onMsg); resolve(); } }, 90_000);
+        });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [market, duration, stakeStr, prediction, transactions, run_panel, client]);
+    }, []);
 
     const executeBatch = useCallback(async (contractType: string) => {
         if (!isReady) {
@@ -395,7 +361,7 @@ const BatchTrader: React.FC = observer(() => {
         stopBatchRef.current = false;
         setBatchProgress({ current: 0, total: bulkCount });
 
-        // Re-authorize before each batch to keep session fresh
+        // Re-authorize before batch to keep session fresh
         try {
             await ensureAuthorized();
         } catch (e: any) {
@@ -404,40 +370,94 @@ const BatchTrader: React.FC = observer(() => {
             return;
         }
 
-        // Execute trades one at a time (sequential = more reliable than parallel)
-        for (let i = 0; i < bulkCount; i++) {
-            if (stopBatchRef.current) break;
-            setBatchProgress({ current: i, total: bulkCount });
+        const api = apiRef.current;
+        const loginid = loginIdRef.current;
+        const stakeVal = Math.max(0.35, parseFloat(stakeStr) || 0.35);
 
-            try {
-                await purchaseOne(contractType);
-            } catch (error: any) {
-                const errMsg = error.message || 'Trade failed';
+        // Open drawer + activate Transactions panel
+        run_panel.toggleDrawer(true);
+        runInAction(() => { run_panel.setContractStage(contract_stages.STARTING); });
+
+        // -----------------------------------------------------------------------
+        // PHASE 1: Fire all N buys simultaneously so they land on the SAME tick
+        // -----------------------------------------------------------------------
+        setBatchProgress({ current: 0, total: bulkCount });
+
+        const buyResults = await Promise.allSettled(
+            Array.from({ length: bulkCount }, () => buyOne(contractType, api))
+        );
+
+        // Record pending trades in local log; collect successful buys for phase 2
+        const successfulBuys: Array<{ buy: any; contractId: string }> = [];
+        buyResults.forEach((result, i) => {
+            if (result.status === 'fulfilled') {
+                const buy = result.value;
+                const contractId = String(buy.contract_id);
+                successfulBuys.push({ buy, contractId });
+                setTrades(prev => [{
+                    id: contractId,
+                    contractType,
+                    buyPrice: parseFloat(buy.buy_price),
+                    status: 'pending' as const,
+                    profit: 0,
+                    time: new Date().toLocaleTimeString(),
+                }, ...prev]);
+            } else {
+                const errMsg = (result.reason as any)?.message || 'Trade failed';
                 setTradeErrors(prev => [...prev.slice(-4), `Trade ${i + 1}: ${errMsg}`]);
-                const errTrade: Trade = {
+                setTrades(prev => [{
                     id: `err-${Date.now()}-${i}`,
                     contractType,
-                    buyPrice: stake,
-                    status: 'error',
+                    buyPrice: stakeVal,
+                    status: 'error' as const,
                     profit: 0,
                     error: errMsg,
                     time: new Date().toLocaleTimeString(),
-                };
-                setTrades(prev => [errTrade, ...prev]);
+                }, ...prev]);
             }
+        });
 
-            setBatchProgress({ current: i + 1, total: bulkCount });
-            if (delayMs > 0 && i < bulkCount - 1 && !stopBatchRef.current) {
-                await sleep(delayMs);
-            }
-        }
+        setBatchProgress({ current: bulkCount, total: bulkCount });
+
+        // -----------------------------------------------------------------------
+        // PHASE 2: Watch all settlements concurrently (non-blocking per contract)
+        // -----------------------------------------------------------------------
+        await Promise.allSettled(
+            successfulBuys.map(({ buy, contractId }) =>
+                watchSettlement(contractId, buy, api, loginid, (poc) => {
+                    if (settledContractsRef.current.has(contractId)) return;
+                    settledContractsRef.current.add(contractId);
+
+                    const profit = parseFloat(poc.profit ?? '0') || 0;
+                    pnlRef.current += profit;
+                    setTotalPnL(pnlRef.current);
+                    setTrades(prev => prev.map(t =>
+                        t.id === contractId ? { ...t, status: profit >= 0 ? 'won' : 'lost', profit } : t
+                    ));
+                    if (profit >= 0) setWins(w => w + 1);
+                    else setLosses(l => l + 1);
+                    if (poc.balance_after) setBalance(parseFloat(poc.balance_after));
+
+                    // One row per settled trade in the right-panel Transactions tab
+                    try {
+                        runInAction(() => {
+                            if (loginid && client.loginid !== loginid) client.setLoginId(loginid);
+                            transactions.onBotContractEvent(poc);
+                        });
+                    } catch (_) { /* ignore */ }
+
+                    const risk = riskRef.current;
+                    if (risk.stopLoss > 0 && pnlRef.current <= -risk.stopLoss) stopBatchRef.current = true;
+                    if (risk.takeProfit > 0 && pnlRef.current >= risk.takeProfit) stopBatchRef.current = true;
+                })
+            )
+        );
 
         setIsExecuting(false);
-        // Keep run stage active briefly so panel stays visible
         setTimeout(() => {
             runInAction(() => run_panel.setContractStage(contract_stages.NOT_RUNNING));
         }, 3000);
-    }, [isReady, isExecuting, bulkCount, stake, delayMs, purchaseOne, authError, ensureAuthorized, run_panel]);
+    }, [isReady, isExecuting, bulkCount, stakeStr, buyOne, watchSettlement, authError, ensureAuthorized, run_panel, client, transactions]);
 
     const stopBatch = useCallback(() => { stopBatchRef.current = true; }, []);
 
