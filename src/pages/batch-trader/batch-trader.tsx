@@ -117,6 +117,7 @@ const BatchTrader: React.FC = () => {
 
     const [stopLoss, setStopLoss] = useState(0);
     const [takeProfit, setTakeProfit] = useState(0);
+    const [tradeError, setTradeError] = useState('');
 
     const wsRef = useRef<WebSocket | null>(null);
     const tickWsRef = useRef<WebSocket | null>(null);
@@ -154,11 +155,15 @@ const BatchTrader: React.FC = () => {
         setDigitFreqs(counts.map(c => parseFloat(((c / total) * 100).toFixed(1))));
     }, []);
 
+    const pipSizeRef = useRef<number>(2);
+
     const handleTickRef = useRef<(tick: any) => void>();
     handleTickRef.current = (tick: any) => {
-        const price = tick.quote.toString();
-        const digit = parseInt(price.slice(-1));
-        setCurrentTick(price);
+        const pipSize = tick.pip_size ?? pipSizeRef.current;
+        pipSizeRef.current = pipSize;
+        const priceStr = tick.quote.toFixed(pipSize);
+        const digit = parseInt(priceStr.slice(-1));
+        setCurrentTick(priceStr);
         setLastDigit(digit);
         const history = digitHistoryRef.current;
         history.push(digit);
@@ -197,10 +202,9 @@ const BatchTrader: React.FC = () => {
 
             if (data.msg_type === 'history' && data.history) {
                 const prices = data.history.prices || [];
-                const digits = prices.map((p: number) => {
-                    const priceStr = p.toString();
-                    return parseInt(priceStr.slice(-1));
-                });
+                const pipSize: number = data.pip_size ?? pipSizeRef.current;
+                pipSizeRef.current = pipSize;
+                const digits = prices.map((p: number) => parseInt(p.toFixed(pipSize).slice(-1)));
                 digitHistoryRef.current = digits;
                 setTickCount(digits.length);
                 const counts = Array(10).fill(0);
@@ -208,7 +212,7 @@ const BatchTrader: React.FC = () => {
                 const total = digits.length || 1;
                 setDigitFreqs(counts.map((c: number) => parseFloat(((c / total) * 100).toFixed(1))));
                 if (prices.length > 0) {
-                    const lastPrice = prices[prices.length - 1].toString();
+                    const lastPrice = prices[prices.length - 1].toFixed(pipSize);
                     const lastD = parseInt(lastPrice.slice(-1));
                     setCurrentTick(lastPrice);
                     setLastDigit(lastD);
@@ -357,7 +361,12 @@ const BatchTrader: React.FC = () => {
     }, []);
 
     const executeBatch = useCallback(async (contractType: string) => {
-        if (!wsRef.current || !isAuthorized || isExecuting) return;
+        if (!isAuthorized) {
+            setTradeError('Connect your Deriv API token first to start trading.');
+            setTimeout(() => setTradeError(''), 4000);
+            return;
+        }
+        if (!wsRef.current || isExecuting) return;
 
         const needBarrier = requiresBarrier(contractType);
 
@@ -652,7 +661,7 @@ const BatchTrader: React.FC = () => {
                                             <button
                                                 className='bbt-actions__btn bbt-actions__btn--a'
                                                 onClick={() => executeBatch(currentContract.a)}
-                                                disabled={!isAuthorized || (requiresBarrier(currentContract.a) && !isDigitValid(prediction, currentContract.a))}
+                                                disabled={requiresBarrier(currentContract.a) && isAuthorized && !isDigitValid(prediction, currentContract.a)}
                                             >
                                                 <span className='bbt-actions__btn-icon'>{currentContract.aIcon}</span>
                                                 <span className='bbt-actions__btn-label'>{currentContract.aLabel} {showPrediction ? prediction : ''}</span>
@@ -661,7 +670,7 @@ const BatchTrader: React.FC = () => {
                                             <button
                                                 className='bbt-actions__btn bbt-actions__btn--b'
                                                 onClick={() => executeBatch(currentContract.b)}
-                                                disabled={!isAuthorized || (requiresBarrier(currentContract.b) && !isDigitValid(prediction, currentContract.b))}
+                                                disabled={requiresBarrier(currentContract.b) && isAuthorized && !isDigitValid(prediction, currentContract.b)}
                                             >
                                                 <span className='bbt-actions__btn-icon'>{currentContract.bIcon}</span>
                                                 <span className='bbt-actions__btn-label'>{currentContract.bLabel} {showPrediction ? prediction : ''}</span>
@@ -670,6 +679,9 @@ const BatchTrader: React.FC = () => {
                                         </>
                                     )}
                                 </div>
+                                {tradeError && (
+                                    <div className='bbt-trade-error'>{tradeError}</div>
+                                )}
                             </div>
                         </div>
                     )}

@@ -113,10 +113,12 @@
             &__content {
                 height: 100%;
                 flex: 1;
+                overflow: hidden;
 
                 @include mobile-or-tablet-screen {
                     width: 100%;
                     overflow-x: auto;
+                    overflow-y: hidden;
 
                     &--no-result {
                         @include flex-center;

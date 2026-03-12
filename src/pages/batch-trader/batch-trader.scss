@@ -555,6 +555,24 @@
     to { transform: rotate(360deg); }
 }
 
+.bbt-trade-error {
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    color: #dc2626;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    animation: bbt-fade-in 0.2s ease;
+}
+
+@keyframes bbt-fade-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 .bbt-stats-panel,
 .bbt-risk-panel,
 .bbt-log-panel {
