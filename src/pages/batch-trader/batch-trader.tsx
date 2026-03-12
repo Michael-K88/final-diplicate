@@ -374,9 +374,15 @@ const BatchTrader: React.FC = observer(() => {
         const loginid = loginIdRef.current;
         const stakeVal = Math.max(0.35, parseFloat(stakeStr) || 0.35);
 
-        // Open drawer + activate Transactions panel
-        run_panel.toggleDrawer(true);
-        runInAction(() => { run_panel.setContractStage(contract_stages.STARTING); });
+        // Mirror exactly what the real bot does on start:
+        // setIsRunning(true) must come FIRST to prevent the reaction
+        // (which watches !is_running) from resetting contract_stage back to NOT_RUNNING.
+        runInAction(() => {
+            run_panel.setIsRunning(true);
+            run_panel.toggleDrawer(true);
+            run_panel.setActiveTabIndex(1); // 0=Summary, 1=Transactions, 2=Journal
+            run_panel.setContractStage(contract_stages.STARTING);
+        });
 
         // -----------------------------------------------------------------------
         // PHASE 1: Buy in groups of 5 simultaneously.
@@ -465,9 +471,14 @@ const BatchTrader: React.FC = observer(() => {
         );
 
         setIsExecuting(false);
+        // Give the user a few seconds to see the results, then release the running state
         setTimeout(() => {
-            runInAction(() => run_panel.setContractStage(contract_stages.NOT_RUNNING));
-        }, 3000);
+            runInAction(() => {
+                run_panel.setIsRunning(false);
+                run_panel.setHasOpenContract(false);
+                run_panel.setContractStage(contract_stages.NOT_RUNNING);
+            });
+        }, 5000);
     }, [isReady, isExecuting, bulkCount, stakeStr, buyOne, watchSettlement, authError, ensureAuthorized, run_panel, client, transactions]);
 
     const stopBatch = useCallback(() => { stopBatchRef.current = true; }, []);
