@@ -255,38 +255,56 @@ const BatchTrader: React.FC = observer(() => {
     }, [client]);
 
     // ---------------------------------------------------------------------------
-    // Core buy helper: proposal → buy for ONE contract. Returns buy response.
-    // Called N times concurrently so all contracts land on the same tick.
+    // Core buy helper with automatic retry (up to 3 attempts, 300 ms back-off).
+    // This handles transient API rate-limit and network errors silently.
     // ---------------------------------------------------------------------------
-    const buyOne = useCallback(async (contractType: string, api: any) => {
+    const buyOne = useCallback(async (contractType: string, api: any): Promise<any> => {
         const needBarrier = requiresBarrier(contractType);
         const stakeVal = Math.max(0.35, parseFloat(stakeStr) || 0.35);
         const cur = currencyRef.current;
 
-        const proposalReq: any = {
-            proposal: 1,
-            amount: stakeVal,
-            basis: 'stake',
-            contract_type: contractType,
-            currency: cur,
-            duration,
-            duration_unit: 't',
-            symbol: market,
+        const attempt = async (): Promise<any> => {
+            const proposalReq: any = {
+                proposal: 1,
+                amount: stakeVal,
+                basis: 'stake',
+                contract_type: contractType,
+                currency: cur,
+                duration,
+                duration_unit: 't',
+                symbol: market,
+            };
+            if (needBarrier) proposalReq.barrier = prediction.toString();
+
+            const proposalRes = await api.send(proposalReq);
+            if (proposalRes.error) throw new Error(proposalRes.error.message || 'Proposal failed');
+            if (!proposalRes.proposal?.id) throw new Error('No proposal returned from API');
+
+            const buyRes = await api.send({
+                buy: proposalRes.proposal.id,
+                price: proposalRes.proposal.ask_price,
+            });
+            if (buyRes.error) throw new Error(buyRes.error.message || 'Buy failed');
+            if (!buyRes.buy?.contract_id) throw new Error('No contract_id in buy response');
+
+            return buyRes.buy;
         };
-        if (needBarrier) proposalReq.barrier = prediction.toString();
 
-        const proposalRes = await api.send(proposalReq);
-        if (proposalRes.error) throw new Error(proposalRes.error.message || 'Proposal failed');
-        if (!proposalRes.proposal?.id) throw new Error('No proposal returned from API');
-
-        const buyRes = await api.send({
-            buy: proposalRes.proposal.id,
-            price: proposalRes.proposal.ask_price,
-        });
-        if (buyRes.error) throw new Error(buyRes.error.message || 'Buy failed');
-        if (!buyRes.buy?.contract_id) throw new Error('No contract_id in buy response');
-
-        return buyRes.buy;
+        // Retry up to 3 times with 300 ms back-off between attempts
+        const MAX_RETRIES = 3;
+        let lastErr: Error = new Error('Unknown error');
+        for (let i = 0; i < MAX_RETRIES; i++) {
+            try {
+                return await attempt();
+            } catch (err: any) {
+                lastErr = err;
+                if (i < MAX_RETRIES - 1) {
+                    // Back-off: 300ms, 600ms before retries 2 and 3
+                    await new Promise(r => setTimeout(r, 300 * (i + 1)));
+                }
+            }
+        }
+        throw lastErr;
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [market, duration, stakeStr, prediction]);
 
