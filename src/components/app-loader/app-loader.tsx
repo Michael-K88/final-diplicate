@@ -3,200 +3,189 @@ import './app-loader.scss';
 
 interface AppLoaderProps {
     onLoadingComplete: () => void;
-    duration?: number; // Duration in milliseconds, default 6000ms (6 seconds)
+    duration?: number;
 }
 
-const AppLoader: React.FC<AppLoaderProps> = ({ onLoadingComplete, duration = 6000 }) => {
-  const [progress, setProgress] = useState(1);
-  const [isVisible, setIsVisible] = useState(true);
-  const bgElementsRef = useRef<HTMLDivElement>(null);
+const AppLoader: React.FC<AppLoaderProps> = ({ onLoadingComplete, duration = 5000 }) => {
+    const [progress, setProgress] = useState(0);
+    const [phase, setPhase] = useState<'in' | 'loaded' | 'out'>('in');
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const animFrameRef = useRef<number>(0);
 
-  // Create twinkling stars
-  const createStars = () => {
-    if (!bgElementsRef.current) return;
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
 
-    // Create many more stars for a rich starfield effect
-    for (let i = 0; i < 200; i++) {
-      const star = document.createElement('div');
-      star.className = 'star';
+        const resize = () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        };
+        resize();
+        window.addEventListener('resize', resize);
 
-      const size = Math.random() * 4 + 0.5; // Varied sizes from 0.5px to 4.5px
-      const leftPos = Math.random() * 100;
-      const topPos = Math.random() * 100;
-      const duration = 2 + Math.random() * 8; // Faster twinkling
-      const delay = Math.random() * 10; // More varied delays
-      const opacity = 0.2 + Math.random() * 0.8; // More opacity variation
+        type Particle = {
+            x: number; y: number; vx: number; vy: number;
+            size: number; alpha: number; color: string;
+        };
 
-      star.style.width = `${size}px`;
-      star.style.height = `${size}px`;
-      star.style.left = `${leftPos}%`;
-      star.style.top = `${topPos}%`;
-      star.style.setProperty('--duration', `${duration}s`);
-      star.style.setProperty('--opacity', opacity.toString());
-      star.style.animationDelay = `${delay}s`;
+        const colors = ['rgba(99,179,237,', 'rgba(255,215,100,', 'rgba(147,112,219,', 'rgba(255,255,255,'];
+        const particles: Particle[] = Array.from({ length: 120 }, () => ({
+            x: Math.random() * window.innerWidth,
+            y: Math.random() * window.innerHeight,
+            vx: (Math.random() - 0.5) * 0.3,
+            vy: (Math.random() - 0.5) * 0.3,
+            size: Math.random() * 2 + 0.4,
+            alpha: Math.random() * 0.6 + 0.1,
+            color: colors[Math.floor(Math.random() * colors.length)],
+        }));
 
-      // Add some stars with different shapes for variety
-      if (Math.random() > 0.8) {
-        star.style.borderRadius = '0';
-        star.style.transform = 'rotate(45deg)';
-      }
+        let t = 0;
+        const draw = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            t += 0.008;
 
-      bgElementsRef.current.appendChild(star);
-    }
-  };
+            particles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                if (p.x < 0) p.x = canvas.width;
+                if (p.x > canvas.width) p.x = 0;
+                if (p.y < 0) p.y = canvas.height;
+                if (p.y > canvas.height) p.y = 0;
 
-  // Create falling dollar bills
-  const createDollar = () => {
-    if (!bgElementsRef.current) return;
+                const glow = p.alpha * (0.7 + 0.3 * Math.sin(t + p.x * 0.01));
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fillStyle = p.color + glow + ')';
+                ctx.fill();
+            });
 
-    const dollarSigns = ['💰', '💵', '💲', '🪙', '💴', '💶', '💷', '💸', '🤑', '💎'];
-    const dollar = document.createElement('div');
-    dollar.className = 'dollar';
-    dollar.textContent = dollarSigns[Math.floor(Math.random() * dollarSigns.length)];
+            const cx = canvas.width / 2;
+            const segments = 60;
+            const amp = 18;
+            ctx.beginPath();
+            for (let i = 0; i <= segments; i++) {
+                const xp = (canvas.width * 0.15) + (canvas.width * 0.7) * (i / segments);
+                const yp = canvas.height * 0.82 + Math.sin(i * 0.4 + t * 1.5) * amp * Math.sin(i * 0.15);
+                i === 0 ? ctx.moveTo(xp, yp) : ctx.lineTo(xp, yp);
+            }
+            ctx.strokeStyle = 'rgba(99,179,237,0.12)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
 
-    const leftPos = Math.random() * 100;
-    const duration = 3 + Math.random() * 8; // Faster falling
-    const delay = Math.random() * 2; // Less delay for more continuous flow
-    const size = 0.6 + Math.random() * 1.8; // More size variation
-    const rotation = Math.random() * 360;
+            ctx.beginPath();
+            for (let i = 0; i <= segments; i++) {
+                const xp = (canvas.width * 0.1) + (canvas.width * 0.8) * (i / segments);
+                const yp = canvas.height * 0.85 + Math.cos(i * 0.3 + t * 1.2) * amp * 0.6;
+                i === 0 ? ctx.moveTo(xp, yp) : ctx.lineTo(xp, yp);
+            }
+            ctx.strokeStyle = 'rgba(255,215,100,0.08)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
 
-    dollar.style.left = `${leftPos}%`;
-    dollar.style.animationDuration = `${duration}s`;
-    dollar.style.animationDelay = `${delay}s`;
-    dollar.style.fontSize = `${size}em`;
-    dollar.style.opacity = (0.4 + Math.random() * 0.6).toString();
-    dollar.style.transform = `rotate(${rotation}deg)`;
+            const grad = ctx.createRadialGradient(cx, canvas.height * 0.38, 0, cx, canvas.height * 0.38, 220);
+            grad.addColorStop(0, 'rgba(0,30,80,0.08)');
+            grad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Add some horizontal drift for more natural movement
-    const drift = (Math.random() - 0.5) * 20;
-    dollar.style.setProperty('--drift', `${drift}px`);
+            animFrameRef.current = requestAnimationFrame(draw);
+        };
+        draw();
 
-    bgElementsRef.current.appendChild(dollar);
+        return () => {
+            cancelAnimationFrame(animFrameRef.current);
+            window.removeEventListener('resize', resize);
+        };
+    }, []);
 
-    setTimeout(() => {
-      if (dollar.parentNode === bgElementsRef.current) {
-        bgElementsRef.current?.removeChild(dollar);
-      }
-    }, duration * 1000);
-  };
+    useEffect(() => {
+        let current = 0;
+        const total = duration;
+        const start = Date.now();
 
-  // Create multiple dollars at once for heavy rain effect
-  const createDollarBurst = () => {
-    // Create 5-8 dollars at once
-    const burstCount = 5 + Math.floor(Math.random() * 4);
-    for (let i = 0; i < burstCount; i++) {
-      setTimeout(() => createDollar(), i * 50); // Slight stagger
-    }
-  };
+        const tick = () => {
+            const elapsed = Date.now() - start;
+            const raw = elapsed / total;
+            const eased = raw < 0.5 ? 2 * raw * raw : -1 + (4 - 2 * raw) * raw;
+            current = Math.min(Math.round(eased * 100), 100);
+            setProgress(current);
 
-  // Container hover effect
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const container = e.currentTarget;
-    const x = e.clientX / window.innerWidth;
-    const y = e.clientY / window.innerHeight;
-    container.style.transform = `translateY(0) rotate3d(${y}, ${x}, 0, ${(x - 0.5) * 2}deg) scale(1.02)`;
-  };
+            if (current < 100) {
+                requestAnimationFrame(tick);
+            } else {
+                setPhase('loaded');
+                setTimeout(() => {
+                    setPhase('out');
+                    setTimeout(onLoadingComplete, 600);
+                }, 400);
+            }
+        };
+        requestAnimationFrame(tick);
+    }, [onLoadingComplete, duration]);
 
-  const handleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
-    e.currentTarget.style.transform = 'translateY(0) rotate3d(0, 0, 0, 0) scale(1)';
-  };
+    return (
+        <div className={`bt-splash bt-splash--${phase}`}>
+            <canvas ref={canvasRef} className='bt-splash__canvas' />
 
-  // Initialize animations
-  useEffect(() => {
-    createStars();
+            <div className='bt-splash__glow bt-splash__glow--top' />
+            <div className='bt-splash__glow bt-splash__glow--mid' />
 
-    // Create initial heavy dollar rain
-    for (let i = 0; i < 100; i++) {
-      setTimeout(() => createDollar(), i * 30); // Create 100 dollars quickly
-    }
+            <div className='bt-splash__content'>
+                <div className='bt-splash__logo-wrap'>
+                    <div className='bt-splash__logo-ring' />
+                    <img
+                        src='/blue-traders-logo.png'
+                        alt='Blue Traders'
+                        className='bt-splash__logo-img'
+                        draggable={false}
+                    />
+                </div>
 
-    // Create continuous dollar bursts
-    const dollarInterval = setInterval(createDollarBurst, 150); // More frequent bursts
+                <div className='bt-splash__brand'>
+                    <h1 className='bt-splash__title'>BLUE TRADERS</h1>
+                    <p className='bt-splash__tagline'>Mastering The Market</p>
+                </div>
 
-    // Also create individual dollars for continuous flow
-    const singleDollarInterval = setInterval(createDollar, 80);
-    
-    // Loading simulation (6 seconds)
-    let currentProgress = 1;
-    let speed = 0.5;
-    const progressInterval = setInterval(() => {
-      if (currentProgress < 30) {
-        speed += 0.15;
-      } else if (currentProgress > 85) {
-        speed *= 0.85;
-      }
+                <div className='bt-splash__divider'>
+                    <span className='bt-splash__divider-line' />
+                    <span className='bt-splash__divider-diamond' />
+                    <span className='bt-splash__divider-line' />
+                </div>
 
-      currentProgress = Math.min(currentProgress + speed, 100);
-      setProgress(Math.floor(currentProgress));
+                <div className='bt-splash__stats'>
+                    <div className='bt-splash__stat'>
+                        <span className='bt-splash__stat-value'>24/7</span>
+                        <span className='bt-splash__stat-label'>TRADING</span>
+                    </div>
+                    <div className='bt-splash__stat-sep' />
+                    <div className='bt-splash__stat'>
+                        <span className='bt-splash__stat-value'>0.5s</span>
+                        <span className='bt-splash__stat-label'>EXECUTION</span>
+                    </div>
+                    <div className='bt-splash__stat-sep' />
+                    <div className='bt-splash__stat'>
+                        <span className='bt-splash__stat-value'>100+</span>
+                        <span className='bt-splash__stat-label'>MARKETS</span>
+                    </div>
+                </div>
 
-      if (currentProgress >= 100) {
-        clearInterval(progressInterval);
-        // Add a small delay before hiding to show 100% completion
-        setTimeout(() => {
-          setIsVisible(false);
-          setTimeout(onLoadingComplete, 300); // Wait for fade out animation
-        }, 200);
-      }
-    }, 40);
-
-    return () => {
-      clearInterval(dollarInterval);
-      clearInterval(singleDollarInterval);
-      clearInterval(progressInterval);
-    };
-  }, [onLoadingComplete]);
-
-  if (!isVisible) return null;
-
-  return (
-    <div className="trading-hub-loader">
-      <div className="background-elements" ref={bgElementsRef}></div>
-      
-      <div 
-        className="loader-container"
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-      >
-        <div className="logo">
-          <div className="logo-main">PRO</div>
-          <div className="logo-sub">TRADINGHUB</div>
+                <div className='bt-splash__progress-wrap'>
+                    <div className='bt-splash__progress-bar'>
+                        <div className='bt-splash__progress-fill' style={{ width: `${progress}%` }} />
+                        <div className='bt-splash__progress-glow' style={{ left: `${progress}%` }} />
+                    </div>
+                    <div className='bt-splash__progress-meta'>
+                        <span className='bt-splash__progress-label'>
+                            {progress < 40 ? 'INITIALIZING' : progress < 70 ? 'LOADING BOTS' : progress < 95 ? 'PREPARING TOOLS' : 'READY'}
+                        </span>
+                        <span className='bt-splash__progress-pct'>{progress}%</span>
+                    </div>
+                </div>
+            </div>
         </div>
-        
-        <div className="welcome-message">
-          <div className="welcome-title">Welcome to deriv third party powered website</div>
-          <div className="welcome-text">Gain access to premium trading features unavailable on the official platform</div>
-        </div>
-        
-        <div className="features-container">
-          <div className="feature-main">Automate your trades now</div>
-          <ul className="feature-list">
-            <li className="feature-item">Analysis Tool</li>
-            <li className="feature-item">Trading Bots</li>
-            <li className="feature-item">Copy Trading</li>
-          </ul>
-          <div className="feature-tagline">Making trading smooth, simple, and stress-free</div>
-        </div>
-        
-        <div className="progress-container">
-          <div className="progress-text">
-            <span>Loading premium features</span>
-            <span className="progress-percent">{progress}%</span>
-          </div>
-          <div className="progress-bar">
-            <div 
-              className="progress-fill" 
-              style={{ width: `${progress}%` }}
-            ></div>
-          </div>
-          <div className="progress-dots">
-            <div className="progress-dot"></div>
-            <div className="progress-dot"></div>
-            <div className="progress-dot"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default AppLoader;
