@@ -556,14 +556,22 @@ const BatchTrader: React.FC = observer(() => {
                                 </div>
 
                                 {showPrediction && (
-                                    <>
-                                        <label className='bbt-label'>Select Prediction Digit</label>
-                                        <input
-                                            type='text' inputMode='numeric' className='bbt-input bbt-input--pred'
-                                            value={prediction}
-                                            onChange={e => { const v = parseInt(e.target.value.replace(/\D/g, '')); if (!isNaN(v) && v >= 0 && v <= 9) setPrediction(v); }}
-                                        />
-                                    </>
+                                    <div className='bbt-pred-row'>
+                                        <label className='bbt-label'>Prediction Digit</label>
+                                        <div className='bbt-pred-stepper'>
+                                            <button
+                                                className='bbt-pred-stepper__btn'
+                                                onClick={() => setPrediction(p => Math.max(0, p - 1))}
+                                                disabled={prediction <= 0}
+                                            >−</button>
+                                            <span className='bbt-pred-stepper__val'>{prediction}</span>
+                                            <button
+                                                className='bbt-pred-stepper__btn'
+                                                onClick={() => setPrediction(p => Math.min(9, p + 1))}
+                                                disabled={prediction >= 9}
+                                            >+</button>
+                                        </div>
+                                    </div>
                                 )}
 
                                 <div className='bbt-curtick'>
@@ -593,8 +601,8 @@ const BatchTrader: React.FC = observer(() => {
                                             return (
                                                 <div
                                                     key={i}
-                                                    className={`bbt-digit ${isActive ? 'bbt-digit--active' : ''} ${isSelected ? 'bbt-digit--sel' : ''}`}
-                                                    onClick={() => showPrediction && setPrediction(i)}
+                                                    className={`bbt-digit ${isActive ? 'bbt-digit--active' : ''} ${isSelected ? 'bbt-digit--sel' : ''} ${showPrediction ? 'bbt-digit--clickable' : ''}`}
+                                                    onClick={() => { if (showPrediction) setPrediction(i); }}
                                                 >
                                                     <svg className='bbt-digit__ring' viewBox='0 0 50 50'>
                                                         <circle cx='25' cy='25' r='22' fill='#2d3748' stroke='#4a5568' strokeWidth='2.5' />
@@ -627,6 +635,15 @@ const BatchTrader: React.FC = observer(() => {
                                         <button className='bbt-clear-errors' onClick={() => setTradeErrors([])}>✕ Clear</button>
                                     </div>
                                 )}
+
+                                <div className='bbt-preview'>
+                                    <span className='bbt-preview__label'>Will execute:</span>
+                                    <span className='bbt-preview__spec'>
+                                        {bulkCount}× [{currentContract.aLabel}{showPrediction ? ` ${prediction}` : ''} / {currentContract.bLabel}{showPrediction ? ` ${prediction}` : ''}]
+                                        {' · '}{duration} tick{duration > 1 ? 's' : ''}
+                                        {' · '}{stake.toFixed(2)} {currency}
+                                    </span>
+                                </div>
 
                                 <div className='bbt-actions'>
                                     {isExecuting && (
