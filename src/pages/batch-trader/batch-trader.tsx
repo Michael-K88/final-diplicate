@@ -293,7 +293,7 @@ const BatchTrader: React.FC = observer(() => {
         const contractId = String(buy.contract_id);
         const tradeTime = new Date().toLocaleTimeString();
 
-        // Add pending entry to our local log
+        // Add pending entry to our local log UI only
         const trade: Trade = {
             id: contractId,
             contractType,
@@ -304,40 +304,14 @@ const BatchTrader: React.FC = observer(() => {
         };
         setTrades(prev => [trade, ...prev]);
 
-        // Push buy event into TransactionsStore (right-panel Transactions tab)
-        // Must be done inside runInAction to ensure MobX observer sees it
-        const buyEvent: any = {
-            contract_id: buy.contract_id,
-            transaction_ids: { buy: buy.transaction_id },
-            buy_price: parseFloat(buy.buy_price),
-            currency: cur,
-            contract_type: contractType,
-            underlying: market,
-            date_start: Math.floor(Date.now() / 1000),
-            status: 'open',
-            is_completed: false,
-            profit: 0,
-        };
-
-        try {
-            runInAction(() => {
-                // Ensure loginid is set so pushTransaction keys correctly
-                if (loginid && client.loginid !== loginid) {
-                    client.setLoginId(loginid);
-                }
-                transactions.onBotContractEvent(buyEvent);
-            });
-        } catch (e) { /* ignore */ }
-
-        // Open the right-panel drawer to Transactions tab
+        // Open the right-panel drawer and set stage so Transactions panel is active
         run_panel.toggleDrawer(true);
-
-        // Set contract stage so Transactions panel shows content (not "bot not running" empty state)
         runInAction(() => {
             run_panel.setContractStage(contract_stages.STARTING);
         });
 
-        // Settlement handler - called once when contract is done
+        // Settlement handler — called ONCE when the contract settles.
+        // We only push to TransactionsStore here (one push = one row, no duplicates).
         const handleSettlement = (poc: any) => {
             if (settledContractsRef.current.has(contractId)) return;
             settledContractsRef.current.add(contractId);
@@ -352,10 +326,11 @@ const BatchTrader: React.FC = observer(() => {
             else setLosses(l => l + 1);
             if (poc.balance_after) setBalance(parseFloat(poc.balance_after));
 
-            // Update right-panel with final contract data
+            // Push the final settled contract into the right-panel Transactions tab (one row per trade)
             try {
                 runInAction(() => {
-                    transactions.onBotContractEvent({ ...poc, is_completed: true });
+                    if (loginid && client.loginid !== loginid) client.setLoginId(loginid);
+                    transactions.onBotContractEvent(poc);
                 });
             } catch (_) { /* ignore */ }
 
@@ -365,8 +340,8 @@ const BatchTrader: React.FC = observer(() => {
             if (risk.takeProfit > 0 && pnlRef.current >= risk.takeProfit) stopBatchRef.current = true;
         };
 
-        // Subscribe to contract status updates via raw WebSocket listener
-        // Add listener BEFORE sending subscribe to avoid race condition on fast 1-tick contracts
+        // Subscribe to contract status updates.
+        // Listener added BEFORE send to catch fast-settling 1-tick contracts.
         let pocSubId: string | null = null;
 
         const onMsg = (evt: MessageEvent) => {
@@ -376,9 +351,6 @@ const BatchTrader: React.FC = observer(() => {
                     const poc = data.proposal_open_contract;
                     if (!pocSubId && data?.subscription?.id) pocSubId = data.subscription.id;
                     if (String(poc?.contract_id || '') === contractId) {
-                        // Update the transaction row with latest data
-                        try { runInAction(() => transactions.onBotContractEvent(poc)); } catch (_) { /* ignore */ }
-                        // If contract is settled, clean up and record result
                         if (poc?.is_sold || poc?.status === 'sold' || poc?.is_expired) {
                             api.connection?.removeEventListener?.('message', onMsg);
                             if (pocSubId) api.send({ forget: pocSubId }).catch(() => {});
@@ -401,7 +373,6 @@ const BatchTrader: React.FC = observer(() => {
             if (pocRes?.subscription?.id) pocSubId = pocRes.subscription.id;
             if (pocRes?.proposal_open_contract) {
                 const poc = pocRes.proposal_open_contract;
-                try { runInAction(() => transactions.onBotContractEvent(poc)); } catch (_) { /* ignore */ }
                 if (poc?.is_sold || poc?.status === 'sold' || poc?.is_expired) {
                     api.connection?.removeEventListener?.('message', onMsg);
                     if (pocSubId) api.send({ forget: pocSubId }).catch(() => {});
