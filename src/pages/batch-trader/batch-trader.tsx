@@ -1,11 +1,8 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
-import { generateDerivApiInstance, V2GetActiveToken, V2GetActiveClientId } from '@/external/bot-skeleton/services/api/appId';
+import { generateDerivApiInstance, V2GetActiveToken } from '@/external/bot-skeleton/services/api/appId';
 import { useStore } from '@/hooks/useStore';
 import './batch-trader.scss';
-
-const APP_ID = 128207;
-const WS_URL = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`;
 
 const MARKETS = [
     { label: 'Volatility 10 (1s) Index', symbol: '1HZ10V' },
@@ -49,8 +46,13 @@ const RANK_COLORS = {
     least: '#ef4444',
 };
 
+const APP_ID = 128207;
+const WS_URL = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`;
+
 const requiresBarrier = (type: string) =>
     ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(type);
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 interface Trade {
     id: string;
@@ -99,9 +101,16 @@ const BatchTrader: React.FC = observer(() => {
     const [market, setMarket] = useState(MARKETS[0].symbol);
     const [contractGroup, setContractGroup] = useState('over_under');
     const [duration, setDuration] = useState(1);
-    const [stake, setStake] = useState(0.5);
+
+    // String-based states so inputs can be fully cleared on mobile
+    const [stakeStr, setStakeStr] = useState('0.35');
+    const stake = Math.max(0.35, parseFloat(stakeStr) || 0.35);
+
     const [bulkCountStr, setBulkCountStr] = useState('1');
     const bulkCount = Math.max(1, parseInt(bulkCountStr) || 1);
+
+    const [delayMs, setDelayMs] = useState(0);
+
     const [prediction, setPrediction] = useState<number>(1);
 
     const [currentTick, setCurrentTick] = useState('');
@@ -134,13 +143,6 @@ const BatchTrader: React.FC = observer(() => {
 
     const isReady = authStatus === 'ready';
 
-    const updateDigitFreqs = useCallback((history: number[]) => {
-        const counts = Array(10).fill(0);
-        history.forEach(d => counts[d]++);
-        const total = history.length || 1;
-        setDigitFreqs(counts.map(c => parseFloat(((c / total) * 100).toFixed(1))));
-    }, []);
-
     const handleTickRef = useRef<(tick: any) => void>();
     handleTickRef.current = (tick: any) => {
         const pipSize = tick.pip_size ?? pipSizeRef.current;
@@ -153,7 +155,10 @@ const BatchTrader: React.FC = observer(() => {
         history.push(digit);
         if (history.length > 1000) history.shift();
         setTickCount(history.length);
-        updateDigitFreqs(history);
+        const counts = Array(10).fill(0);
+        history.forEach(d => counts[d]++);
+        const total = history.length || 1;
+        setDigitFreqs(counts.map(c => parseFloat(((c / total) * 100).toFixed(1))));
     };
 
     useEffect(() => {
@@ -169,21 +174,14 @@ const BatchTrader: React.FC = observer(() => {
         setTickCount(0);
 
         let historyLoaded = false;
-
         const ws = new WebSocket(WS_URL);
 
         ws.onopen = () => {
-            ws.send(JSON.stringify({
-                ticks_history: market,
-                count: 1000,
-                end: 'latest',
-                style: 'ticks',
-            }));
+            ws.send(JSON.stringify({ ticks_history: market, count: 1000, end: 'latest', style: 'ticks' }));
         };
 
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
-
             if (data.msg_type === 'history' && data.history) {
                 const prices = data.history.prices || [];
                 const pipSize: number = data.pip_size ?? pipSizeRef.current;
@@ -197,26 +195,20 @@ const BatchTrader: React.FC = observer(() => {
                 setDigitFreqs(counts.map((c: number) => parseFloat(((c / total) * 100).toFixed(1))));
                 if (prices.length > 0) {
                     const lastPrice = prices[prices.length - 1].toFixed(pipSize);
-                    const lastD = parseInt(lastPrice.slice(-1));
                     setCurrentTick(lastPrice);
-                    setLastDigit(lastD);
+                    setLastDigit(parseInt(lastPrice.slice(-1)));
                 }
                 historyLoaded = true;
                 ws.send(JSON.stringify({ ticks: market, subscribe: 1 }));
             }
-
             if (data.msg_type === 'tick' && data.tick && historyLoaded) {
                 handleTickRef.current?.(data.tick);
             }
         };
 
         ws.onerror = () => {};
-
         tickWsRef.current = ws;
-
-        return () => {
-            ws.close();
-        };
+        return () => { ws.close(); };
     }, [market]);
 
     useEffect(() => {
@@ -231,15 +223,16 @@ const BatchTrader: React.FC = observer(() => {
             try {
                 const api = generateDerivApiInstance();
                 apiRef.current = api;
-                const { authorize, error } = await api.authorize(token);
-                if (error) throw new Error(error.message || 'Authorization failed');
+                const res = await api.authorize(token);
+                if (res.error) throw new Error(res.error.message || 'Authorization failed');
+                const auth = res.authorize;
                 authorizedRef.current = true;
-                currencyRef.current = authorize.currency || 'USD';
+                currencyRef.current = auth.currency || 'USD';
                 setAuthStatus('ready');
-                setBalance(parseFloat(authorize.balance));
-                setCurrency(authorize.currency || 'USD');
-                setLoginId(authorize.loginid || '');
-                client.setLoginId(authorize.loginid || '');
+                setBalance(parseFloat(auth.balance));
+                setCurrency(auth.currency || 'USD');
+                setLoginId(auth.loginid || '');
+                client.setLoginId(auth.loginid || '');
                 client.setIsLoggedIn(true);
             } catch (e: any) {
                 setAuthStatus('error');
@@ -251,6 +244,7 @@ const BatchTrader: React.FC = observer(() => {
             apiRef.current?.disconnect?.();
             tickWsRef.current?.close();
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const purchaseOne = useCallback(async (contractType: string): Promise<void> => {
@@ -259,10 +253,11 @@ const BatchTrader: React.FC = observer(() => {
 
         const needBarrier = requiresBarrier(contractType);
         const cur = currencyRef.current;
+        const stakeVal = parseFloat(stakeStr) || 0.35;
 
         const proposalReq: any = {
             proposal: 1,
-            amount: stake,
+            amount: stakeVal,
             basis: 'stake',
             contract_type: contractType,
             currency: cur,
@@ -295,18 +290,21 @@ const BatchTrader: React.FC = observer(() => {
         };
         setTrades(prev => [trade, ...prev]);
 
+        // Push buy event to RunPanel
         try {
             transactions.onBotContractEvent({
                 contract_id: buy.contract_id,
                 transaction_ids: { buy: buy.transaction_id },
-                buy_price: buy.buy_price,
+                buy_price: parseFloat(buy.buy_price),
                 currency: cur,
                 contract_type: contractType as any,
                 underlying: market,
                 date_start: Math.floor(Date.now() / 1000),
                 status: 'open',
+                is_completed: false,
+                profit: 0,
             } as any);
-        } catch (e) { /* ignore */ }
+        } catch (_) { /* ignore */ }
 
         run_panel.toggleDrawer(true);
 
@@ -314,72 +312,70 @@ const BatchTrader: React.FC = observer(() => {
             if (settledContractsRef.current.has(contractId)) return;
             settledContractsRef.current.add(contractId);
 
-            const profit = parseFloat(poc.profit) || 0;
+            const profit = parseFloat(poc.profit ?? '0') || 0;
             pnlRef.current += profit;
             setTotalPnL(pnlRef.current);
             setTrades(prev => prev.map(t =>
-                t.id === contractId
-                    ? { ...t, status: profit >= 0 ? 'won' : 'lost', profit }
-                    : t
+                t.id === contractId ? { ...t, status: profit >= 0 ? 'won' : 'lost', profit } : t
             ));
             if (profit >= 0) setWins(w => w + 1);
             else setLosses(l => l + 1);
-
-            if (poc.balance_after) {
-                setBalance(parseFloat(poc.balance_after));
-            }
+            if (poc.balance_after) setBalance(parseFloat(poc.balance_after));
 
             const risk = riskRef.current;
             if (risk.stopLoss > 0 && pnlRef.current <= -risk.stopLoss) stopBatchRef.current = true;
             if (risk.takeProfit > 0 && pnlRef.current >= risk.takeProfit) stopBatchRef.current = true;
         };
 
-        try {
-            let pocSubId: string | null = null;
+        // Subscribe to contract updates via raw WebSocket listener
+        let pocSubId: string | null = null;
 
-            const onMsg = (evt: MessageEvent) => {
-                try {
-                    const data = JSON.parse(evt.data as string);
-                    if (data?.msg_type === 'proposal_open_contract') {
-                        const poc = data.proposal_open_contract;
-                        if (!pocSubId && data?.subscription?.id) pocSubId = data.subscription.id;
-                        if (String(poc?.contract_id || '') === contractId) {
-                            try { transactions.onBotContractEvent(poc); } catch (_) { /* ignore */ }
-                            if (poc?.is_sold || poc?.status === 'sold') {
-                                if (pocSubId) api.send({ forget: pocSubId }).catch(() => {});
-                                api.connection?.removeEventListener?.('message', onMsg);
-                                handleSettlement(poc);
-                            }
+        const onMsg = (evt: MessageEvent) => {
+            try {
+                const data = JSON.parse(evt.data as string);
+                if (data?.msg_type === 'proposal_open_contract') {
+                    const poc = data.proposal_open_contract;
+                    if (!pocSubId && data?.subscription?.id) pocSubId = data.subscription.id;
+                    if (String(poc?.contract_id || '') === contractId) {
+                        try { transactions.onBotContractEvent(poc); } catch (_) { /* ignore */ }
+                        if (poc?.is_sold || poc?.status === 'sold' || poc?.is_expired) {
+                            api.connection?.removeEventListener?.('message', onMsg);
+                            if (pocSubId) api.send({ forget: pocSubId }).catch(() => {});
+                            handleSettlement(poc);
                         }
                     }
-                } catch (_) { /* ignore */ }
-            };
-            api.connection?.addEventListener?.('message', onMsg);
+                }
+            } catch (_) { /* ignore */ }
+        };
 
+        api.connection?.addEventListener?.('message', onMsg);
+
+        try {
             const pocRes = await api.send({
                 proposal_open_contract: 1,
                 contract_id: buy.contract_id,
                 subscribe: 1,
             });
-            pocSubId = pocRes?.subscription?.id || null;
+            if (pocRes?.subscription?.id) pocSubId = pocRes.subscription.id;
 
             if (pocRes?.proposal_open_contract) {
                 const poc = pocRes.proposal_open_contract;
                 try { transactions.onBotContractEvent(poc); } catch (_) { /* ignore */ }
-                if (poc?.is_sold || poc?.status === 'sold') {
-                    if (pocSubId) api.send({ forget: pocSubId }).catch(() => {});
+                if (poc?.is_sold || poc?.status === 'sold' || poc?.is_expired) {
                     api.connection?.removeEventListener?.('message', onMsg);
+                    if (pocSubId) api.send({ forget: pocSubId }).catch(() => {});
                     handleSettlement(poc);
                 }
             }
         } catch (_) { /* ignore poc subscribe errors */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [market, duration, stake, prediction, transactions, run_panel]);
+    }, [market, duration, stakeStr, prediction, transactions, run_panel]);
 
+    // Execute trades SEQUENTIALLY (not parallel) to avoid API rate-limiting
     const executeBatch = useCallback(async (contractType: string) => {
         if (!isReady) {
             setTradeError(authError || 'Please log in to your Deriv account to trade.');
-            setTimeout(() => setTradeError(''), 4000);
+            setTimeout(() => setTradeError(''), 5000);
             return;
         }
         if (isExecuting) return;
@@ -388,26 +384,38 @@ const BatchTrader: React.FC = observer(() => {
         stopBatchRef.current = false;
         setBatchProgress({ current: 0, total: bulkCount });
 
-        const results = await Promise.allSettled(
-            Array.from({ length: bulkCount }, (_, i) =>
-                purchaseOne(contractType).catch((error: any) => {
-                    const trade: Trade = {
-                        id: `err-${Date.now()}-${i}`,
-                        contractType,
-                        buyPrice: stake,
-                        status: 'error',
-                        profit: 0,
-                        error: error.message || 'Trade failed',
-                        time: new Date().toLocaleTimeString(),
-                    };
-                    setTrades(prev => [trade, ...prev]);
-                })
-            )
-        );
+        for (let i = 0; i < bulkCount; i++) {
+            if (stopBatchRef.current) break;
 
-        setBatchProgress({ current: results.length, total: bulkCount });
+            setBatchProgress({ current: i, total: bulkCount });
+
+            try {
+                await purchaseOne(contractType);
+            } catch (error: any) {
+                const trade: Trade = {
+                    id: `err-${Date.now()}-${i}`,
+                    contractType,
+                    buyPrice: parseFloat(stakeStr) || 0.35,
+                    status: 'error',
+                    profit: 0,
+                    error: error.message || 'Trade failed',
+                    time: new Date().toLocaleTimeString(),
+                };
+                setTrades(prev => [trade, ...prev]);
+                setTradeError(`Trade ${i + 1} error: ${error.message}`);
+                setTimeout(() => setTradeError(''), 5000);
+            }
+
+            setBatchProgress({ current: i + 1, total: bulkCount });
+
+            // Delay between trades if configured
+            if (delayMs > 0 && i < bulkCount - 1 && !stopBatchRef.current) {
+                await sleep(delayMs);
+            }
+        }
+
         setIsExecuting(false);
-    }, [isReady, isExecuting, bulkCount, stake, purchaseOne, authError]);
+    }, [isReady, isExecuting, bulkCount, stakeStr, delayMs, purchaseOne, authError]);
 
     const stopBatch = useCallback(() => { stopBatchRef.current = true; }, []);
 
@@ -473,15 +481,9 @@ const BatchTrader: React.FC = observer(() => {
                         </div>
                     </div>
                     <div className='bbt-header__right'>
-                        {authStatus === 'connecting' && (
-                            <span className='bbt-auth__info'>Connecting...</span>
-                        )}
-                        {authStatus === 'ready' && (
-                            <span className='bbt-auth__info'>{loginId} • {balance.toFixed(2)} {currency}</span>
-                        )}
-                        {authStatus === 'error' && (
-                            <span className='bbt-auth__error'>{authError}</span>
-                        )}
+                        {authStatus === 'connecting' && <span className='bbt-auth__info'>Connecting...</span>}
+                        {authStatus === 'ready' && <span className='bbt-auth__info'>{loginId} • {balance.toFixed(2)} {currency}</span>}
+                        {authStatus === 'error' && <span className='bbt-auth__error'>⚠ {authError}</span>}
                     </div>
                 </div>
 
@@ -504,27 +506,45 @@ const BatchTrader: React.FC = observer(() => {
                                 <div className='bbt-row3'>
                                     <div>
                                         <label className='bbt-label'>Ticks</label>
-                                        <input type='number' className='bbt-input' value={duration} min={1} max={10}
-                                            onChange={e => setDuration(parseInt(e.target.value) || 1)} />
-                                    </div>
-                                    <div>
-                                        <label className='bbt-label'>Stake</label>
-                                        <input type='number' className='bbt-input' value={stake} min={0.35} step={0.01}
-                                            onChange={e => setStake(parseFloat(e.target.value) || 0.35)} />
-                                    </div>
-                                    <div>
-                                        <label className='bbt-label'>No. of Bulk Trades</label>
                                         <input
-                                            type='number'
+                                            type='text'
+                                            inputMode='numeric'
+                                            className='bbt-input'
+                                            value={duration}
+                                            onChange={e => {
+                                                const v = parseInt(e.target.value.replace(/\D/g, ''));
+                                                if (!isNaN(v) && v >= 1 && v <= 10) setDuration(v);
+                                            }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className='bbt-label'>Stake ({currencyRef.current})</label>
+                                        <input
+                                            type='text'
+                                            inputMode='decimal'
+                                            className='bbt-input'
+                                            value={stakeStr}
+                                            onChange={e => setStakeStr(e.target.value.replace(/[^0-9.]/g, ''))}
+                                            onBlur={() => {
+                                                const v = parseFloat(stakeStr);
+                                                setStakeStr(String(isNaN(v) || v < 0.35 ? '0.35' : v));
+                                            }}
+                                            placeholder='0.35'
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className='bbt-label'>Bulk Trades</label>
+                                        <input
+                                            type='text'
+                                            inputMode='numeric'
                                             className='bbt-input'
                                             value={bulkCountStr}
-                                            min={1}
-                                            max={100}
-                                            onChange={e => setBulkCountStr(e.target.value)}
-                                            onBlur={e => {
-                                                const n = parseInt(e.target.value);
-                                                setBulkCountStr(String(isNaN(n) || n < 1 ? 1 : n));
+                                            onChange={e => setBulkCountStr(e.target.value.replace(/\D/g, ''))}
+                                            onBlur={() => {
+                                                const n = parseInt(bulkCountStr);
+                                                setBulkCountStr(String(isNaN(n) || n < 1 ? 1 : Math.min(n, 100)));
                                             }}
+                                            placeholder='1'
                                         />
                                     </div>
                                 </div>
@@ -533,12 +553,14 @@ const BatchTrader: React.FC = observer(() => {
                                     <>
                                         <label className='bbt-label'>Select Prediction Digit</label>
                                         <input
-                                            type='number'
+                                            type='text'
+                                            inputMode='numeric'
                                             className='bbt-input bbt-input--pred'
                                             value={prediction}
-                                            min={0}
-                                            max={9}
-                                            onChange={e => setPrediction(Math.max(0, Math.min(9, parseInt(e.target.value) || 0)))}
+                                            onChange={e => {
+                                                const v = parseInt(e.target.value.replace(/\D/g, ''));
+                                                if (!isNaN(v) && v >= 0 && v <= 9) setPrediction(v);
+                                            }}
                                         />
                                     </>
                                 )}
@@ -605,11 +627,15 @@ const BatchTrader: React.FC = observer(() => {
                                     </div>
                                 </div>
 
+                                {tradeError && (
+                                    <div className='bbt-trade-error'>{tradeError}</div>
+                                )}
+
                                 <div className='bbt-actions'>
                                     {isExecuting && (
                                         <div className='bbt-actions__progress'>
                                             <div className='bbt-actions__spinner' />
-                                            Placing {batchProgress.total} trade{batchProgress.total !== 1 ? 's' : ''}...
+                                            Trade {batchProgress.current + 1} of {batchProgress.total}...
                                         </div>
                                     )}
                                     <div className='bbt-actions__row'>
@@ -640,9 +666,6 @@ const BatchTrader: React.FC = observer(() => {
                                         ⏹ Stop
                                     </button>
                                 </div>
-                                {tradeError && (
-                                    <div className='bbt-trade-error'>{tradeError}</div>
-                                )}
                             </div>
                         </div>
                     )}
@@ -674,7 +697,16 @@ const BatchTrader: React.FC = observer(() => {
                                             <span className='bbt-stat-card__value--red'>{losses}</span>
                                         </span>
                                     </div>
+                                    <div className='bbt-stat-card'>
+                                        <span className='bbt-stat-card__label'>Trades Run</span>
+                                        <span className='bbt-stat-card__value'>{wins + losses}</span>
+                                    </div>
+                                    <div className='bbt-stat-card'>
+                                        <span className='bbt-stat-card__label'>Bulk Count</span>
+                                        <span className='bbt-stat-card__value'>{bulkCount}</span>
+                                    </div>
                                 </div>
+                                <button className='bbt-log-clear' style={{ marginTop: '16px' }} onClick={resetStats}>Reset Stats</button>
                             </div>
                         </div>
                     )}
@@ -702,10 +734,10 @@ const BatchTrader: React.FC = observer(() => {
                                                     </div>
                                                 </div>
                                                 <div className='bbt-log-item__right'>
-                                                    <span className='bbt-log-item__stake'>${t.buyPrice.toFixed(2)}</span>
+                                                    <span className='bbt-log-item__stake'>{(parseFloat(stakeStr) || 0.35).toFixed(2)} {currency}</span>
                                                     {t.status === 'won' && <span className='bbt-log-item__profit'>+{t.profit.toFixed(2)}</span>}
                                                     {t.status === 'lost' && <span className='bbt-log-item__loss'>{t.profit.toFixed(2)}</span>}
-                                                    {t.status === 'pending' && <span className='bbt-log-item__pending'>Pending</span>}
+                                                    {t.status === 'pending' && <span className='bbt-log-item__pending'>Pending...</span>}
                                                     {t.status === 'error' && <span className='bbt-log-item__err'>{t.error}</span>}
                                                 </div>
                                             </div>
@@ -722,22 +754,40 @@ const BatchTrader: React.FC = observer(() => {
                                 <h2 className='bbt-card__heading'>Risk Management</h2>
                                 <div className='bbt-risk-grid'>
                                     <div>
-                                        <label className='bbt-label'>Stop Loss</label>
-                                        <input type='number' className='bbt-input' value={stopLoss} min={0} step={0.5}
-                                            onChange={e => setStopLoss(parseFloat(e.target.value) || 0)} />
-                                        <span className='bbt-risk-hint'>Trading stops when total loss reaches this amount (0 = disabled)</span>
+                                        <label className='bbt-label'>Stop Loss ({currency})</label>
+                                        <input
+                                            type='text'
+                                            inputMode='decimal'
+                                            className='bbt-input'
+                                            value={stopLoss}
+                                            onChange={e => setStopLoss(parseFloat(e.target.value.replace(/[^0-9.]/g, '')) || 0)}
+                                            placeholder='0'
+                                        />
+                                        <span className='bbt-risk-hint'>Stops when total loss reaches this amount (0 = disabled)</span>
                                     </div>
                                     <div>
-                                        <label className='bbt-label'>Take Profit</label>
-                                        <input type='number' className='bbt-input' value={takeProfit} min={0} step={0.5}
-                                            onChange={e => setTakeProfit(parseFloat(e.target.value) || 0)} />
-                                        <span className='bbt-risk-hint'>Trading stops when total profit reaches this amount (0 = disabled)</span>
+                                        <label className='bbt-label'>Take Profit ({currency})</label>
+                                        <input
+                                            type='text'
+                                            inputMode='decimal'
+                                            className='bbt-input'
+                                            value={takeProfit}
+                                            onChange={e => setTakeProfit(parseFloat(e.target.value.replace(/[^0-9.]/g, '')) || 0)}
+                                            placeholder='0'
+                                        />
+                                        <span className='bbt-risk-hint'>Stops when total profit reaches this amount (0 = disabled)</span>
                                     </div>
                                     <div>
                                         <label className='bbt-label'>Delay Between Trades (ms)</label>
-                                        <input type='number' className='bbt-input' value={delayMs} min={0} step={100}
-                                            onChange={e => setDelayMs(parseInt(e.target.value) || 0)} />
-                                        <span className='bbt-risk-hint'>Milliseconds to wait between each trade in a batch</span>
+                                        <input
+                                            type='text'
+                                            inputMode='numeric'
+                                            className='bbt-input'
+                                            value={delayMs}
+                                            onChange={e => setDelayMs(parseInt(e.target.value.replace(/\D/g, '')) || 0)}
+                                            placeholder='0'
+                                        />
+                                        <span className='bbt-risk-hint'>Milliseconds to wait between each trade in a batch (0 = no delay)</span>
                                     </div>
                                 </div>
                             </div>
