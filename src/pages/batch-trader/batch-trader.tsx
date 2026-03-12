@@ -1,4 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { observer } from 'mobx-react-lite';
+import { generateDerivApiInstance, V2GetActiveToken, V2GetActiveClientId } from '@/external/bot-skeleton/services/api/appId';
+import { useStore } from '@/hooks/useStore';
 import './batch-trader.scss';
 
 const APP_ID = 128207;
@@ -83,13 +86,12 @@ function getDigitRankColor(digitFreqs: number[], digitIndex: number): string {
     return DIGIT_BASE_COLORS[digitIndex];
 }
 
-const BatchTrader: React.FC = () => {
-    const [token, setToken] = useState('');
-    const [isConnected, setIsConnected] = useState(false);
-    const [isAuthorized, setIsAuthorized] = useState(false);
-    const [connectError, setConnectError] = useState('');
-    const [activeNav, setActiveNav] = useState('trade');
+const BatchTrader: React.FC = observer(() => {
+    const { transactions, run_panel } = useStore();
 
+    const [activeNav, setActiveNav] = useState('trade');
+    const [authStatus, setAuthStatus] = useState<'idle' | 'connecting' | 'ready' | 'error'>('idle');
+    const [authError, setAuthError] = useState('');
     const [balance, setBalance] = useState(0);
     const [currency, setCurrency] = useState('USD');
     const [loginId, setLoginId] = useState('');
@@ -114,39 +116,23 @@ const BatchTrader: React.FC = () => {
     const [wins, setWins] = useState(0);
     const [losses, setLosses] = useState(0);
     const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+    const [tradeError, setTradeError] = useState('');
 
     const [stopLoss, setStopLoss] = useState(0);
     const [takeProfit, setTakeProfit] = useState(0);
-    const [tradeError, setTradeError] = useState('');
 
-    const wsRef = useRef<WebSocket | null>(null);
+    const apiRef = useRef<any>(null);
     const tickWsRef = useRef<WebSocket | null>(null);
-    const reqIdRef = useRef(1);
-    const pendingRef = useRef<Map<number, { resolve: Function; reject: Function }>>(new Map());
     const stopBatchRef = useRef(false);
     const pnlRef = useRef(0);
     const riskRef = useRef({ stopLoss: 0, takeProfit: 0 });
     riskRef.current = { stopLoss, takeProfit };
     const settledContractsRef = useRef<Set<string>>(new Set());
-    const contractSubsRef = useRef<Map<string, string>>(new Map());
+    const pipSizeRef = useRef<number>(2);
+    const authorizedRef = useRef(false);
+    const currencyRef = useRef('USD');
 
-    const sendRequest = useCallback((request: any): Promise<any> => {
-        return new Promise((resolve, reject) => {
-            if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-                reject({ message: 'WebSocket not connected' });
-                return;
-            }
-            const id = reqIdRef.current++;
-            pendingRef.current.set(id, { resolve, reject });
-            wsRef.current.send(JSON.stringify({ ...request, req_id: id }));
-            setTimeout(() => {
-                if (pendingRef.current.has(id)) {
-                    pendingRef.current.delete(id);
-                    reject({ message: 'Request timeout' });
-                }
-            }, 15000);
-        });
-    }, []);
+    const isReady = authStatus === 'ready';
 
     const updateDigitFreqs = useCallback((history: number[]) => {
         const counts = Array(10).fill(0);
@@ -154,8 +140,6 @@ const BatchTrader: React.FC = () => {
         const total = history.length || 1;
         setDigitFreqs(counts.map(c => parseFloat(((c / total) * 100).toFixed(1))));
     }, []);
-
-    const pipSizeRef = useRef<number>(2);
 
     const handleTickRef = useRef<(tick: any) => void>();
     handleTickRef.current = (tick: any) => {
@@ -235,140 +219,157 @@ const BatchTrader: React.FC = () => {
         };
     }, [market]);
 
-    const handleContractUpdate = useCallback((contract: any, subscriptionId?: string) => {
-        if (contract.is_sold || contract.is_expired || contract.status === 'sold') {
-            const contractId = contract.contract_id?.toString();
-            if (!contractId || settledContractsRef.current.has(contractId)) return;
-            settledContractsRef.current.add(contractId);
-
-            if (subscriptionId && wsRef.current?.readyState === WebSocket.OPEN) {
-                wsRef.current.send(JSON.stringify({ forget: subscriptionId }));
-                contractSubsRef.current.delete(contractId);
-            }
-
-            const profit = parseFloat(contract.profit) || 0;
-
-            setTrades(prev => prev.map(t =>
-                t.id === contractId
-                    ? { ...t, status: profit >= 0 ? 'won' : 'lost', profit }
-                    : t
-            ));
-
-            if (profit >= 0) setWins(w => w + 1);
-            else setLosses(l => l + 1);
-
-            pnlRef.current += profit;
-            setTotalPnL(pnlRef.current);
-
-            if (contract.balance_after) {
-                setBalance(parseFloat(contract.balance_after));
-            }
-
-            const risk = riskRef.current;
-            if (risk.stopLoss > 0 && pnlRef.current <= -risk.stopLoss) {
-                stopBatchRef.current = true;
-            }
-            if (risk.takeProfit > 0 && pnlRef.current >= risk.takeProfit) {
-                stopBatchRef.current = true;
-            }
-        }
-    }, []);
-
-    const connect = useCallback(() => {
-        if (!token.trim()) {
-            setConnectError('Please enter your API token');
-            return;
-        }
-        setConnectError('');
-        const ws = new WebSocket(WS_URL);
-
-        ws.onopen = () => {
-            setIsConnected(true);
-            ws.send(JSON.stringify({ authorize: token.trim() }));
-        };
-
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-
-            if (data.req_id && pendingRef.current.has(data.req_id)) {
-                const { resolve, reject } = pendingRef.current.get(data.req_id)!;
-                pendingRef.current.delete(data.req_id);
-                if (data.error) reject(data.error);
-                else resolve(data);
-            }
-
-            if (data.msg_type === 'authorize') {
-                if (data.error) {
-                    setConnectError(data.error.message || 'Authorization failed');
-                    setIsAuthorized(false);
-                    ws.close();
-                    wsRef.current = null;
-                    setIsConnected(false);
-                } else {
-                    setIsAuthorized(true);
-                    setBalance(parseFloat(data.authorize.balance));
-                    setCurrency(data.authorize.currency);
-                    setLoginId(data.authorize.loginid);
-                    ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-                }
-            }
-
-            if (data.msg_type === 'balance') {
-                setBalance(parseFloat(data.balance.balance));
-                setCurrency(data.balance.currency);
-            }
-
-            if (data.msg_type === 'proposal_open_contract') {
-                const subId = data.subscription?.id;
-                if (subId && data.proposal_open_contract?.contract_id) {
-                    contractSubsRef.current.set(data.proposal_open_contract.contract_id.toString(), subId);
-                }
-                handleContractUpdate(data.proposal_open_contract, subId);
-            }
-
-            if (data.error && !data.req_id) {
-                console.warn('Batch Trader WS:', data.error.message);
-            }
-        };
-
-        ws.onerror = () => {
-            setConnectError('Connection error');
-            setIsConnected(false);
-            setIsAuthorized(false);
-        };
-
-        ws.onclose = () => {
-            setIsConnected(false);
-            setIsAuthorized(false);
-        };
-
-        wsRef.current = ws;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [token]);
-
-    const disconnect = useCallback(() => {
-        wsRef.current?.close();
-        wsRef.current = null;
-        setIsConnected(false);
-        setIsAuthorized(false);
-    }, []);
-
     useEffect(() => {
+        const initApi = async () => {
+            const token = V2GetActiveToken();
+            if (!token) {
+                setAuthStatus('error');
+                setAuthError('Please log in to your Deriv account to use Batch Trader.');
+                return;
+            }
+            setAuthStatus('connecting');
+            try {
+                const api = generateDerivApiInstance();
+                apiRef.current = api;
+                const { authorize, error } = await api.authorize(token);
+                if (error) throw new Error(error.message || 'Authorization failed');
+                authorizedRef.current = true;
+                currencyRef.current = authorize.currency || 'USD';
+                setAuthStatus('ready');
+                setBalance(parseFloat(authorize.balance));
+                setCurrency(authorize.currency || 'USD');
+                setLoginId(authorize.loginid || '');
+            } catch (e: any) {
+                setAuthStatus('error');
+                setAuthError(e.message || 'Failed to connect. Please log in and try again.');
+            }
+        };
+        initApi();
         return () => {
-            wsRef.current?.close();
+            apiRef.current?.disconnect?.();
             tickWsRef.current?.close();
         };
     }, []);
 
+    const purchaseOne = useCallback(async (contractType: string): Promise<void> => {
+        const api = apiRef.current;
+        if (!api || !authorizedRef.current) throw new Error('Not connected');
+
+        const needBarrier = requiresBarrier(contractType);
+        const cur = currencyRef.current;
+
+        const proposalReq: any = {
+            proposal: 1,
+            amount: stake,
+            basis: 'stake',
+            contract_type: contractType,
+            currency: cur,
+            duration,
+            duration_unit: 't',
+            symbol: market,
+        };
+        if (needBarrier) proposalReq.barrier = prediction.toString();
+
+        const proposalRes = await api.send(proposalReq);
+        if (proposalRes.error) throw new Error(proposalRes.error.message);
+
+        const buyRes = await api.send({
+            buy: proposalRes.proposal.id,
+            price: proposalRes.proposal.ask_price,
+        });
+        if (buyRes.error) throw new Error(buyRes.error.message);
+
+        const buy = buyRes.buy;
+        const contractId = String(buy.contract_id);
+        const tradeTime = new Date().toLocaleTimeString();
+
+        const trade: Trade = {
+            id: contractId,
+            contractType,
+            buyPrice: parseFloat(buy.buy_price),
+            status: 'pending',
+            profit: 0,
+            time: tradeTime,
+        };
+        setTrades(prev => [trade, ...prev]);
+
+        try {
+            transactions.onBotContractEvent({
+                contract_id: buy.contract_id,
+                transaction_ids: { buy: buy.transaction_id },
+                buy_price: buy.buy_price,
+                currency: cur,
+                contract_type: contractType as any,
+                underlying: market,
+                date_start: Math.floor(Date.now() / 1000),
+                status: 'open',
+            } as any);
+        } catch (e) { /* ignore */ }
+
+        run_panel.toggleDrawer(true);
+
+        try {
+            const pocRes = await api.send({
+                proposal_open_contract: 1,
+                contract_id: buy.contract_id,
+                subscribe: 1,
+            });
+            let pocSubId: string | null = pocRes?.subscription?.id || null;
+
+            if (pocRes?.proposal_open_contract) {
+                try { transactions.onBotContractEvent(pocRes.proposal_open_contract); } catch (e) { /* ignore */ }
+            }
+
+            const onMsg = (evt: MessageEvent) => {
+                try {
+                    const data = JSON.parse(evt.data as string);
+                    if (data?.msg_type === 'proposal_open_contract') {
+                        const poc = data.proposal_open_contract;
+                        if (!pocSubId && data?.subscription?.id) pocSubId = data.subscription.id;
+                        if (String(poc?.contract_id || '') === contractId) {
+                            try { transactions.onBotContractEvent(poc); } catch (e) { /* ignore */ }
+                            if (poc?.is_sold || poc?.status === 'sold') {
+                                if (pocSubId) api.send({ forget: pocSubId }).catch(() => {});
+                                api.connection?.removeEventListener?.('message', onMsg);
+
+                                if (settledContractsRef.current.has(contractId)) return;
+                                settledContractsRef.current.add(contractId);
+
+                                const profit = parseFloat(poc.profit) || 0;
+                                pnlRef.current += profit;
+                                setTotalPnL(pnlRef.current);
+                                setTrades(prev => prev.map(t =>
+                                    t.id === contractId
+                                        ? { ...t, status: profit >= 0 ? 'won' : 'lost', profit }
+                                        : t
+                                ));
+                                if (profit >= 0) setWins(w => w + 1);
+                                else setLosses(l => l + 1);
+
+                                if (poc.balance_after) {
+                                    setBalance(parseFloat(poc.balance_after));
+                                }
+
+                                const risk = riskRef.current;
+                                if (risk.stopLoss > 0 && pnlRef.current <= -risk.stopLoss) stopBatchRef.current = true;
+                                if (risk.takeProfit > 0 && pnlRef.current >= risk.takeProfit) stopBatchRef.current = true;
+                            }
+                        }
+                    }
+                } catch (e) { /* ignore */ }
+            };
+            api.connection?.addEventListener?.('message', onMsg);
+        } catch (e) { /* ignore poc subscribe errors */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [market, duration, stake, prediction, transactions, run_panel]);
+
     const executeBatch = useCallback(async (contractType: string) => {
-        if (!isAuthorized) {
-            setTradeError('Connect your Deriv API token first to start trading.');
+        if (!isReady) {
+            setTradeError(authError || 'Please log in to your Deriv account to trade.');
             setTimeout(() => setTradeError(''), 4000);
             return;
         }
-        if (!wsRef.current || isExecuting) return;
-
-        const needBarrier = requiresBarrier(contractType);
+        if (isExecuting) return;
 
         setIsExecuting(true);
         stopBatchRef.current = false;
@@ -377,48 +378,8 @@ const BatchTrader: React.FC = () => {
         for (let i = 0; i < bulkCount; i++) {
             if (stopBatchRef.current) break;
             setBatchProgress({ current: i + 1, total: bulkCount });
-
             try {
-                const proposalReq: any = {
-                    proposal: 1,
-                    amount: stake,
-                    basis: 'stake',
-                    contract_type: contractType,
-                    currency,
-                    duration,
-                    duration_unit: 't',
-                    symbol: market,
-                };
-
-                if (needBarrier) {
-                    proposalReq.barrier = prediction.toString();
-                }
-
-                const proposalRes = await sendRequest(proposalReq);
-                const buyRes = await sendRequest({
-                    buy: proposalRes.proposal.id,
-                    price: proposalRes.proposal.ask_price,
-                });
-
-                const contractId = buyRes.buy.contract_id.toString();
-                const trade: Trade = {
-                    id: contractId,
-                    contractType,
-                    buyPrice: parseFloat(buyRes.buy.buy_price),
-                    status: 'pending',
-                    profit: 0,
-                    time: new Date().toLocaleTimeString(),
-                };
-
-                setTrades(prev => [trade, ...prev]);
-                setBalance(parseFloat(buyRes.buy.balance_after));
-
-                wsRef.current?.send(JSON.stringify({
-                    proposal_open_contract: 1,
-                    contract_id: buyRes.buy.contract_id,
-                    subscribe: 1,
-                }));
-
+                await purchaseOne(contractType);
                 if (delayMs > 0 && i < bulkCount - 1) {
                     await new Promise(r => setTimeout(r, delayMs));
                 }
@@ -433,15 +394,14 @@ const BatchTrader: React.FC = () => {
                     time: new Date().toLocaleTimeString(),
                 };
                 setTrades(prev => [trade, ...prev]);
-
-                if (error.code === 'InsufficientBalance') {
+                if (error.message?.includes?.('InsufficientBalance') || error.code === 'InsufficientBalance') {
                     stopBatchRef.current = true;
                 }
             }
         }
 
         setIsExecuting(false);
-    }, [isAuthorized, isExecuting, market, duration, stake, bulkCount, prediction, delayMs, currency, sendRequest]);
+    }, [isReady, isExecuting, bulkCount, delayMs, stake, purchaseOne, authError]);
 
     const stopBatch = useCallback(() => { stopBatchRef.current = true; }, []);
 
@@ -452,12 +412,6 @@ const BatchTrader: React.FC = () => {
         setLosses(0);
         pnlRef.current = 0;
         settledContractsRef.current.clear();
-        contractSubsRef.current.forEach((subId) => {
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-                wsRef.current.send(JSON.stringify({ forget: subId }));
-            }
-        });
-        contractSubsRef.current.clear();
     }, []);
 
     const currentContract = CONTRACT_MAP[contractGroup];
@@ -500,7 +454,7 @@ const BatchTrader: React.FC = () => {
                     </button>
                 ))}
                 <div className='bbt-nav__spacer' />
-                <div className={`bbt-nav__status ${isAuthorized ? 'bbt-nav__status--ok' : ''}`} />
+                <div className={`bbt-nav__status ${isReady ? 'bbt-nav__status--ok' : authStatus === 'connecting' ? 'bbt-nav__status--connecting' : ''}`} />
             </nav>
 
             <div className='bbt-main'>
@@ -513,27 +467,15 @@ const BatchTrader: React.FC = () => {
                         </div>
                     </div>
                     <div className='bbt-header__right'>
-                        {!isAuthorized ? (
-                            <div className='bbt-auth'>
-                                <input
-                                    type='password'
-                                    className='bbt-auth__input'
-                                    placeholder='Enter Deriv API Token'
-                                    value={token}
-                                    onChange={e => setToken(e.target.value)}
-                                    onKeyDown={e => e.key === 'Enter' && connect()}
-                                />
-                                <button className='bbt-auth__btn' onClick={connect} disabled={isConnected}>
-                                    {isConnected ? 'Connecting...' : 'Connect'}
-                                </button>
-                            </div>
-                        ) : (
-                            <div className='bbt-auth'>
-                                <span className='bbt-auth__info'>{loginId} • {balance.toFixed(2)} {currency}</span>
-                                <button className='bbt-auth__btn bbt-auth__btn--dc' onClick={disconnect}>Disconnect</button>
-                            </div>
+                        {authStatus === 'connecting' && (
+                            <span className='bbt-auth__info'>Connecting...</span>
                         )}
-                        {connectError && <span className='bbt-auth__error'>{connectError}</span>}
+                        {authStatus === 'ready' && (
+                            <span className='bbt-auth__info'>{loginId} • {balance.toFixed(2)} {currency}</span>
+                        )}
+                        {authStatus === 'error' && (
+                            <span className='bbt-auth__error'>{authError}</span>
+                        )}
                     </div>
                 </div>
 
@@ -661,7 +603,7 @@ const BatchTrader: React.FC = () => {
                                             <button
                                                 className='bbt-actions__btn bbt-actions__btn--a'
                                                 onClick={() => executeBatch(currentContract.a)}
-                                                disabled={requiresBarrier(currentContract.a) && isAuthorized && !isDigitValid(prediction, currentContract.a)}
+                                                disabled={requiresBarrier(currentContract.a) && isReady && !isDigitValid(prediction, currentContract.a)}
                                             >
                                                 <span className='bbt-actions__btn-icon'>{currentContract.aIcon}</span>
                                                 <span className='bbt-actions__btn-label'>{currentContract.aLabel} {showPrediction ? prediction : ''}</span>
@@ -670,7 +612,7 @@ const BatchTrader: React.FC = () => {
                                             <button
                                                 className='bbt-actions__btn bbt-actions__btn--b'
                                                 onClick={() => executeBatch(currentContract.b)}
-                                                disabled={requiresBarrier(currentContract.b) && isAuthorized && !isDigitValid(prediction, currentContract.b)}
+                                                disabled={requiresBarrier(currentContract.b) && isReady && !isDigitValid(prediction, currentContract.b)}
                                             >
                                                 <span className='bbt-actions__btn-icon'>{currentContract.bIcon}</span>
                                                 <span className='bbt-actions__btn-label'>{currentContract.bLabel} {showPrediction ? prediction : ''}</span>
@@ -786,6 +728,6 @@ const BatchTrader: React.FC = () => {
             </div>
         </div>
     );
-};
+});
 
 export default BatchTrader;

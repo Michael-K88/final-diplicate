@@ -75,6 +75,12 @@
             background: #22c55e;
             box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
         }
+
+        &--connecting {
+            background: #eab308;
+            box-shadow: 0 0 8px rgba(234, 179, 8, 0.5);
+            animation: bbt-cursor-pulse 0.8s ease-in-out infinite;
+        }
     }
 }
 
