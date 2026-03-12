@@ -87,7 +87,7 @@ function getDigitRankColor(digitFreqs: number[], digitIndex: number): string {
 }
 
 const BatchTrader: React.FC = observer(() => {
-    const { transactions, run_panel } = useStore();
+    const { transactions, run_panel, client } = useStore();
 
     const [activeNav, setActiveNav] = useState('trade');
     const [authStatus, setAuthStatus] = useState<'idle' | 'connecting' | 'ready' | 'error'>('idle');
@@ -239,6 +239,8 @@ const BatchTrader: React.FC = observer(() => {
                 setBalance(parseFloat(authorize.balance));
                 setCurrency(authorize.currency || 'USD');
                 setLoginId(authorize.loginid || '');
+                client.setLoginId(authorize.loginid || '');
+                client.setIsLoggedIn(true);
             } catch (e: any) {
                 setAuthStatus('error');
                 setAuthError(e.message || 'Failed to connect. Please log in and try again.');
@@ -308,17 +310,32 @@ const BatchTrader: React.FC = observer(() => {
 
         run_panel.toggleDrawer(true);
 
-        try {
-            const pocRes = await api.send({
-                proposal_open_contract: 1,
-                contract_id: buy.contract_id,
-                subscribe: 1,
-            });
-            let pocSubId: string | null = pocRes?.subscription?.id || null;
+        const handleSettlement = (poc: any) => {
+            if (settledContractsRef.current.has(contractId)) return;
+            settledContractsRef.current.add(contractId);
 
-            if (pocRes?.proposal_open_contract) {
-                try { transactions.onBotContractEvent(pocRes.proposal_open_contract); } catch (e) { /* ignore */ }
+            const profit = parseFloat(poc.profit) || 0;
+            pnlRef.current += profit;
+            setTotalPnL(pnlRef.current);
+            setTrades(prev => prev.map(t =>
+                t.id === contractId
+                    ? { ...t, status: profit >= 0 ? 'won' : 'lost', profit }
+                    : t
+            ));
+            if (profit >= 0) setWins(w => w + 1);
+            else setLosses(l => l + 1);
+
+            if (poc.balance_after) {
+                setBalance(parseFloat(poc.balance_after));
             }
+
+            const risk = riskRef.current;
+            if (risk.stopLoss > 0 && pnlRef.current <= -risk.stopLoss) stopBatchRef.current = true;
+            if (risk.takeProfit > 0 && pnlRef.current >= risk.takeProfit) stopBatchRef.current = true;
+        };
+
+        try {
+            let pocSubId: string | null = null;
 
             const onMsg = (evt: MessageEvent) => {
                 try {
@@ -327,39 +344,35 @@ const BatchTrader: React.FC = observer(() => {
                         const poc = data.proposal_open_contract;
                         if (!pocSubId && data?.subscription?.id) pocSubId = data.subscription.id;
                         if (String(poc?.contract_id || '') === contractId) {
-                            try { transactions.onBotContractEvent(poc); } catch (e) { /* ignore */ }
+                            try { transactions.onBotContractEvent(poc); } catch (_) { /* ignore */ }
                             if (poc?.is_sold || poc?.status === 'sold') {
                                 if (pocSubId) api.send({ forget: pocSubId }).catch(() => {});
                                 api.connection?.removeEventListener?.('message', onMsg);
-
-                                if (settledContractsRef.current.has(contractId)) return;
-                                settledContractsRef.current.add(contractId);
-
-                                const profit = parseFloat(poc.profit) || 0;
-                                pnlRef.current += profit;
-                                setTotalPnL(pnlRef.current);
-                                setTrades(prev => prev.map(t =>
-                                    t.id === contractId
-                                        ? { ...t, status: profit >= 0 ? 'won' : 'lost', profit }
-                                        : t
-                                ));
-                                if (profit >= 0) setWins(w => w + 1);
-                                else setLosses(l => l + 1);
-
-                                if (poc.balance_after) {
-                                    setBalance(parseFloat(poc.balance_after));
-                                }
-
-                                const risk = riskRef.current;
-                                if (risk.stopLoss > 0 && pnlRef.current <= -risk.stopLoss) stopBatchRef.current = true;
-                                if (risk.takeProfit > 0 && pnlRef.current >= risk.takeProfit) stopBatchRef.current = true;
+                                handleSettlement(poc);
                             }
                         }
                     }
-                } catch (e) { /* ignore */ }
+                } catch (_) { /* ignore */ }
             };
             api.connection?.addEventListener?.('message', onMsg);
-        } catch (e) { /* ignore poc subscribe errors */ }
+
+            const pocRes = await api.send({
+                proposal_open_contract: 1,
+                contract_id: buy.contract_id,
+                subscribe: 1,
+            });
+            pocSubId = pocRes?.subscription?.id || null;
+
+            if (pocRes?.proposal_open_contract) {
+                const poc = pocRes.proposal_open_contract;
+                try { transactions.onBotContractEvent(poc); } catch (_) { /* ignore */ }
+                if (poc?.is_sold || poc?.status === 'sold') {
+                    if (pocSubId) api.send({ forget: pocSubId }).catch(() => {});
+                    api.connection?.removeEventListener?.('message', onMsg);
+                    handleSettlement(poc);
+                }
+            }
+        } catch (_) { /* ignore poc subscribe errors */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [market, duration, stake, prediction, transactions, run_panel]);
 
