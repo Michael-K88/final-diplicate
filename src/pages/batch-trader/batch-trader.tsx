@@ -100,9 +100,9 @@ const BatchTrader: React.FC = observer(() => {
     const [contractGroup, setContractGroup] = useState('over_under');
     const [duration, setDuration] = useState(1);
     const [stake, setStake] = useState(0.5);
-    const [bulkCount, setBulkCount] = useState(1);
+    const [bulkCountStr, setBulkCountStr] = useState('1');
+    const bulkCount = Math.max(1, parseInt(bulkCountStr) || 1);
     const [prediction, setPrediction] = useState<number>(1);
-    const [delayMs, setDelayMs] = useState(500);
 
     const [currentTick, setCurrentTick] = useState('');
     const [lastDigit, setLastDigit] = useState<number | null>(null);
@@ -388,33 +388,26 @@ const BatchTrader: React.FC = observer(() => {
         stopBatchRef.current = false;
         setBatchProgress({ current: 0, total: bulkCount });
 
-        for (let i = 0; i < bulkCount; i++) {
-            if (stopBatchRef.current) break;
-            setBatchProgress({ current: i + 1, total: bulkCount });
-            try {
-                await purchaseOne(contractType);
-                if (delayMs > 0 && i < bulkCount - 1) {
-                    await new Promise(r => setTimeout(r, delayMs));
-                }
-            } catch (error: any) {
-                const trade: Trade = {
-                    id: `err-${Date.now()}-${i}`,
-                    contractType,
-                    buyPrice: stake,
-                    status: 'error',
-                    profit: 0,
-                    error: error.message || 'Trade failed',
-                    time: new Date().toLocaleTimeString(),
-                };
-                setTrades(prev => [trade, ...prev]);
-                if (error.message?.includes?.('InsufficientBalance') || error.code === 'InsufficientBalance') {
-                    stopBatchRef.current = true;
-                }
-            }
-        }
+        const results = await Promise.allSettled(
+            Array.from({ length: bulkCount }, (_, i) =>
+                purchaseOne(contractType).catch((error: any) => {
+                    const trade: Trade = {
+                        id: `err-${Date.now()}-${i}`,
+                        contractType,
+                        buyPrice: stake,
+                        status: 'error',
+                        profit: 0,
+                        error: error.message || 'Trade failed',
+                        time: new Date().toLocaleTimeString(),
+                    };
+                    setTrades(prev => [trade, ...prev]);
+                })
+            )
+        );
 
+        setBatchProgress({ current: results.length, total: bulkCount });
         setIsExecuting(false);
-    }, [isReady, isExecuting, bulkCount, delayMs, stake, purchaseOne, authError]);
+    }, [isReady, isExecuting, bulkCount, stake, purchaseOne, authError]);
 
     const stopBatch = useCallback(() => { stopBatchRef.current = true; }, []);
 
@@ -521,8 +514,18 @@ const BatchTrader: React.FC = observer(() => {
                                     </div>
                                     <div>
                                         <label className='bbt-label'>No. of Bulk Trades</label>
-                                        <input type='number' className='bbt-input' value={bulkCount} min={1} max={100}
-                                            onChange={e => setBulkCount(parseInt(e.target.value) || 1)} />
+                                        <input
+                                            type='number'
+                                            className='bbt-input'
+                                            value={bulkCountStr}
+                                            min={1}
+                                            max={100}
+                                            onChange={e => setBulkCountStr(e.target.value)}
+                                            onBlur={e => {
+                                                const n = parseInt(e.target.value);
+                                                setBulkCountStr(String(isNaN(n) || n < 1 ? 1 : n));
+                                            }}
+                                        />
                                     </div>
                                 </div>
 
@@ -603,36 +606,39 @@ const BatchTrader: React.FC = observer(() => {
                                 </div>
 
                                 <div className='bbt-actions'>
-                                    {isExecuting ? (
-                                        <>
-                                            <div className='bbt-actions__progress'>
-                                                <div className='bbt-actions__spinner' />
-                                                Executing {batchProgress.current} / {batchProgress.total}
-                                            </div>
-                                            <button className='bbt-actions__stop' onClick={stopBatch}>Stop</button>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <button
-                                                className='bbt-actions__btn bbt-actions__btn--a'
-                                                onClick={() => executeBatch(currentContract.a)}
-                                                disabled={requiresBarrier(currentContract.a) && isReady && !isDigitValid(prediction, currentContract.a)}
-                                            >
-                                                <span className='bbt-actions__btn-icon'>{currentContract.aIcon}</span>
-                                                <span className='bbt-actions__btn-label'>{currentContract.aLabel} {showPrediction ? prediction : ''}</span>
-                                                <span className='bbt-actions__btn-pct'>{aPercent}%</span>
-                                            </button>
-                                            <button
-                                                className='bbt-actions__btn bbt-actions__btn--b'
-                                                onClick={() => executeBatch(currentContract.b)}
-                                                disabled={requiresBarrier(currentContract.b) && isReady && !isDigitValid(prediction, currentContract.b)}
-                                            >
-                                                <span className='bbt-actions__btn-icon'>{currentContract.bIcon}</span>
-                                                <span className='bbt-actions__btn-label'>{currentContract.bLabel} {showPrediction ? prediction : ''}</span>
-                                                <span className='bbt-actions__btn-pct'>{bPercent}%</span>
-                                            </button>
-                                        </>
+                                    {isExecuting && (
+                                        <div className='bbt-actions__progress'>
+                                            <div className='bbt-actions__spinner' />
+                                            Placing {batchProgress.total} trade{batchProgress.total !== 1 ? 's' : ''}...
+                                        </div>
                                     )}
+                                    <div className='bbt-actions__row'>
+                                        <button
+                                            className='bbt-actions__btn bbt-actions__btn--a'
+                                            onClick={() => executeBatch(currentContract.a)}
+                                            disabled={isExecuting || (requiresBarrier(currentContract.a) && isReady && !isDigitValid(prediction, currentContract.a))}
+                                        >
+                                            <span className='bbt-actions__btn-icon'>{currentContract.aIcon}</span>
+                                            <span className='bbt-actions__btn-label'>{currentContract.aLabel} {showPrediction ? prediction : ''}</span>
+                                            <span className='bbt-actions__btn-pct'>{aPercent}%</span>
+                                        </button>
+                                        <button
+                                            className='bbt-actions__btn bbt-actions__btn--b'
+                                            onClick={() => executeBatch(currentContract.b)}
+                                            disabled={isExecuting || (requiresBarrier(currentContract.b) && isReady && !isDigitValid(prediction, currentContract.b))}
+                                        >
+                                            <span className='bbt-actions__btn-icon'>{currentContract.bIcon}</span>
+                                            <span className='bbt-actions__btn-label'>{currentContract.bLabel} {showPrediction ? prediction : ''}</span>
+                                            <span className='bbt-actions__btn-pct'>{bPercent}%</span>
+                                        </button>
+                                    </div>
+                                    <button
+                                        className={`bbt-actions__stop ${!isExecuting ? 'bbt-actions__stop--disabled' : ''}`}
+                                        onClick={stopBatch}
+                                        disabled={!isExecuting}
+                                    >
+                                        ⏹ Stop
+                                    </button>
                                 </div>
                                 {tradeError && (
                                     <div className='bbt-trade-error'>{tradeError}</div>
