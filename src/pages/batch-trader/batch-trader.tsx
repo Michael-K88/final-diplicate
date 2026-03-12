@@ -379,45 +379,56 @@ const BatchTrader: React.FC = observer(() => {
         runInAction(() => { run_panel.setContractStage(contract_stages.STARTING); });
 
         // -----------------------------------------------------------------------
-        // PHASE 1: Fire all N buys simultaneously so they land on the SAME tick
+        // PHASE 1: Buy in groups of 5 simultaneously.
+        // Each group lands on the same tick (same entry/exit spot).
+        // Groups of 5 stay within Deriv's concurrent-request limit.
         // -----------------------------------------------------------------------
+        const CONCURRENCY = 5;
+        const successfulBuys: Array<{ buy: any; contractId: string }> = [];
+        let completedCount = 0;
+
         setBatchProgress({ current: 0, total: bulkCount });
 
-        const buyResults = await Promise.allSettled(
-            Array.from({ length: bulkCount }, () => buyOne(contractType, api))
-        );
+        for (let offset = 0; offset < bulkCount; offset += CONCURRENCY) {
+            if (stopBatchRef.current) break;
+            const groupSize = Math.min(CONCURRENCY, bulkCount - offset);
 
-        // Record pending trades in local log; collect successful buys for phase 2
-        const successfulBuys: Array<{ buy: any; contractId: string }> = [];
-        buyResults.forEach((result, i) => {
-            if (result.status === 'fulfilled') {
-                const buy = result.value;
-                const contractId = String(buy.contract_id);
-                successfulBuys.push({ buy, contractId });
-                setTrades(prev => [{
-                    id: contractId,
-                    contractType,
-                    buyPrice: parseFloat(buy.buy_price),
-                    status: 'pending' as const,
-                    profit: 0,
-                    time: new Date().toLocaleTimeString(),
-                }, ...prev]);
-            } else {
-                const errMsg = (result.reason as any)?.message || 'Trade failed';
-                setTradeErrors(prev => [...prev.slice(-4), `Trade ${i + 1}: ${errMsg}`]);
-                setTrades(prev => [{
-                    id: `err-${Date.now()}-${i}`,
-                    contractType,
-                    buyPrice: stakeVal,
-                    status: 'error' as const,
-                    profit: 0,
-                    error: errMsg,
-                    time: new Date().toLocaleTimeString(),
-                }, ...prev]);
-            }
-        });
+            const groupResults = await Promise.allSettled(
+                Array.from({ length: groupSize }, () => buyOne(contractType, api))
+            );
 
-        setBatchProgress({ current: bulkCount, total: bulkCount });
+            groupResults.forEach((result, j) => {
+                const tradeIndex = offset + j;
+                if (result.status === 'fulfilled') {
+                    const buy = result.value;
+                    const contractId = String(buy.contract_id);
+                    successfulBuys.push({ buy, contractId });
+                    setTrades(prev => [{
+                        id: contractId,
+                        contractType,
+                        buyPrice: parseFloat(buy.buy_price),
+                        status: 'pending' as const,
+                        profit: 0,
+                        time: new Date().toLocaleTimeString(),
+                    }, ...prev]);
+                } else {
+                    const errMsg = (result.reason as any)?.message || 'Trade failed';
+                    setTradeErrors(prev => [...prev.slice(-4), `Trade ${tradeIndex + 1}: ${errMsg}`]);
+                    setTrades(prev => [{
+                        id: `err-${Date.now()}-${tradeIndex}`,
+                        contractType,
+                        buyPrice: stakeVal,
+                        status: 'error' as const,
+                        profit: 0,
+                        error: errMsg,
+                        time: new Date().toLocaleTimeString(),
+                    }, ...prev]);
+                }
+            });
+
+            completedCount += groupSize;
+            setBatchProgress({ current: completedCount, total: bulkCount });
+        }
 
         // -----------------------------------------------------------------------
         // PHASE 2: Watch all settlements concurrently (non-blocking per contract)
