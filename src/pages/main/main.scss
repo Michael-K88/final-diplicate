@@ -198,6 +198,21 @@
         }
     }
 
+    &__tabs-wrapper {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+
+        &--with-content {
+            flex: 1;
+            min-height: 0;
+
+            .dc-tabs {
+                height: 100%;
+            }
+        }
+    }
+
     &__iframe-tabs {
         position: relative;
         flex: 1;

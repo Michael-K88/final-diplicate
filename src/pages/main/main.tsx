@@ -239,7 +239,7 @@ const AppWrapper = observer(() => {
                 <div
                     className={classNames('main__container')}
                 >
-                    <div>
+                    <div className={classNames('main__tabs-wrapper', { 'main__tabs-wrapper--with-content': active_tab < 3 })}>
                         <Tabs active_index={active_tab} className='main__tabs' onTabItemClick={handleTabChange} top>
                             <div
                                 label={
