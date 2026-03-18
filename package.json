@@ -49,6 +49,7 @@
         "html-react-parser": "^5.1.18",
         "js-cookie": "^3.0.5",
         "localforage": "^1.10.0",
+        "lodash": "^4.17.23",
         "lucide-react": "^0.540.0",
         "lz-string": "^1.5.0",
         "mobx": "^6.12.3",
@@ -183,6 +184,10 @@
     "overrides": {
         "cross-spawn": "^7.0.6",
         "braces": "^3.0.3",
-        "brace-expansion@2.0.1": "2.0.2"
+        "brace-expansion@2.0.1": "2.0.2",
+        "lodash.set": "file:./patches/lodash-set-safe",
+        "minimatch": ">=9.0.7",
+        "serialize-javascript": ">=7.0.3",
+        "tar": ">=7.5.10"
     }
 }

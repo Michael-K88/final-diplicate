@@ -1,0 +1,7 @@
+{
+    "name": "lodash.set",
+    "version": "4.3.2",
+    "description": "Safe shim for lodash.set using patched lodash >= 4.17.21",
+    "main": "index.js",
+    "license": "MIT"
+}
