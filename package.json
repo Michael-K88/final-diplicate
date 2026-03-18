@@ -181,11 +181,13 @@
         "sass-embedded-win32-ia32": "1.85.1",
         "sass-embedded-win32-x64": "1.85.1"
     },
+    "workspaces": [
+        "patches/lodash-set-safe"
+    ],
     "overrides": {
         "cross-spawn": "^7.0.6",
         "braces": "^3.0.3",
         "brace-expansion@2.0.1": "2.0.2",
-        "lodash.set": "file:./patches/lodash-set-safe",
         "minimatch": ">=9.0.7",
         "serialize-javascript": ">=7.0.3",
         "tar": ">=7.5.10"
