@@ -1,5 +1,6 @@
 import React from 'react';
 import classNames from 'classnames';
+import DOMPurify from 'dompurify';
 import { Button, useDevice } from '@deriv-com/ui';
 import ButtonLink from '../button-link/button-link';
 import DesktopWrapper from '../shared_ui/desktop-wrapper';
@@ -104,7 +105,9 @@ const PageError = ({
                                     lineHeight='x'
                                     key={index}
                                     className='dc-page-error__message-paragraph'
-                                    dangerouslySetInnerHTML={{ __html: (message as TMessageObject)?.message }}
+                                    dangerouslySetInnerHTML={{
+                                        __html: DOMPurify.sanitize((message as TMessageObject)?.message ?? ''),
+                                    }}
                                 />
                             ) : (
                                 <Text

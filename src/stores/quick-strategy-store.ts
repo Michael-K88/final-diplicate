@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import { action, makeObservable, observable, reaction } from 'mobx';
 import { ApiHelpers, config as qs_config, load } from '@/external/bot-skeleton';
 import { save_types } from '@/external/bot-skeleton/constants/save-type';
@@ -165,7 +166,7 @@ export default class QuickStrategyStore implements IQuickStrategyStore {
             const name_list = `${name.toUpperCase()}_LIST`;
             const el_blocks = strategy_dom?.querySelectorAll(`field[name="${name_list}"]`);
             el_blocks?.forEach((el_block: HTMLElement) => {
-                el_block.innerHTML = value;
+                el_block.innerHTML = DOMPurify.sanitize(value);
             });
         };
         const { unit, action, type, growth_rate, ...rest_data } = data;
