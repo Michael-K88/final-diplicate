@@ -444,6 +444,22 @@ const BatchTrader: React.FC = observer(() => {
             }, ...prev]);
         };
 
+        // Helper: build a proposal request for the chosen contract type
+        const buildProposalReq = () => {
+            const req: any = {
+                proposal: 1,
+                amount: stakeVal,
+                basis: 'stake',
+                contract_type: contractType,
+                currency: currencyRef.current,
+                duration,
+                duration_unit: 't',
+                symbol: market,
+            };
+            if (requiresBarrier(contractType)) req.barrier = prediction.toString();
+            return req;
+        };
+
         if (delay > 0) {
             // Sequential mode: one contract at a time with delay in between
             for (let i = 0; i < bulkCount; i++) {
@@ -458,21 +474,70 @@ const BatchTrader: React.FC = observer(() => {
                 }
             }
         } else {
-            // Concurrent mode: buy in groups of CONCURRENCY simultaneously
+            // ---------------------------------------------------------------
+            // 2-phase same-tick mode:
+            //   Phase A – collect ALL proposals in parallel (grouped to stay
+            //             within Deriv's rate limit).
+            //   Phase B – fire ALL buy requests at the same instant so every
+            //             contract lands on the same entry/exit tick.
+            // ---------------------------------------------------------------
+
+            // Phase A: gather proposals
+            const allProposalResults: Array<PromiseSettledResult<any>> = [];
             for (let offset = 0; offset < bulkCount; offset += CONCURRENCY) {
                 if (stopBatchRef.current) break;
                 const groupSize = Math.min(CONCURRENCY, bulkCount - offset);
+                const group = await Promise.allSettled(
+                    Array.from({ length: groupSize }, () => api.send(buildProposalReq()))
+                );
+                allProposalResults.push(...group);
+            }
 
-                const groupResults = await Promise.allSettled(
-                    Array.from({ length: groupSize }, () => buyOne(contractType, api))
+            // Separate valid proposals from failed ones
+            type ValidEntry = { proposalValue: any; originalIndex: number };
+            const validProposals: ValidEntry[] = [];
+            allProposalResults.forEach((r, i) => {
+                if (r.status === 'rejected' || (r as PromiseFulfilledResult<any>).value?.error) {
+                    const errMsg = r.status === 'rejected'
+                        ? (r.reason?.message || 'Proposal failed')
+                        : ((r as PromiseFulfilledResult<any>).value.error.message || 'Proposal failed');
+                    recordError(i, new Error(errMsg));
+                    completedCount++;
+                } else {
+                    validProposals.push({ proposalValue: (r as PromiseFulfilledResult<any>).value, originalIndex: i });
+                }
+            });
+
+            setBatchProgress({ current: completedCount, total: bulkCount });
+
+            if (validProposals.length > 0 && !stopBatchRef.current) {
+                // Phase B: fire ALL buy requests simultaneously → same tick for all
+                const buyResults = await Promise.allSettled(
+                    validProposals.map(({ proposalValue }) =>
+                        api.send({
+                            buy: proposalValue.proposal.id,
+                            price: proposalValue.proposal.ask_price,
+                        })
+                    )
                 );
 
-                groupResults.forEach((result, j) => {
-                    if (result.status === 'fulfilled') recordBuy(result.value);
-                    else recordError(offset + j, result.reason);
+                buyResults.forEach((result, idx) => {
+                    const originalIndex = validProposals[idx].originalIndex;
+                    if (result.status === 'fulfilled') {
+                        const buyRes = result.value;
+                        if (buyRes?.error) {
+                            recordError(originalIndex, new Error(buyRes.error.message || 'Buy failed'));
+                        } else if (buyRes?.buy?.contract_id) {
+                            recordBuy(buyRes.buy);
+                        } else {
+                            recordError(originalIndex, new Error('No contract_id in buy response'));
+                        }
+                    } else {
+                        recordError(originalIndex, result.reason);
+                    }
+                    completedCount++;
                 });
 
-                completedCount += groupSize;
                 setBatchProgress({ current: completedCount, total: bulkCount });
             }
         }
