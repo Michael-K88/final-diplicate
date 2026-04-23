@@ -405,12 +405,9 @@ const BatchTrader: React.FC = observer(() => {
         });
 
         // -----------------------------------------------------------------------
-        // PHASE 1: Purchase the selected contract `bulkCount` times.
-        // When a delay is set (Risk tab), trades run one at a time with that
-        // delay between them.  Without a delay they run in concurrent groups of
-        // 5 to stay within Deriv's request-rate limit.
+        // PHASE 1: Purchase the selected contract bulkCount times, one by one.
+        // An optional inter-trade delay can be configured in the Risk tab.
         // -----------------------------------------------------------------------
-        const CONCURRENCY = 5;
         const successfulBuys: Array<{ buy: any; contractId: string }> = [];
         let completedCount = 0;
         const delay = delayMsRef.current;
@@ -444,101 +441,22 @@ const BatchTrader: React.FC = observer(() => {
             }, ...prev]);
         };
 
-        // Helper: build a proposal request for the chosen contract type
-        const buildProposalReq = () => {
-            const req: any = {
-                proposal: 1,
-                amount: stakeVal,
-                basis: 'stake',
-                contract_type: contractType,
-                currency: currencyRef.current,
-                duration,
-                duration_unit: 't',
-                symbol: market,
-            };
-            if (requiresBarrier(contractType)) req.barrier = prediction.toString();
-            return req;
-        };
+        // Buy the selected contract one at a time, bulkCount times.
+        // Each iteration purchases exactly one contract; an optional delay
+        // between purchases can be set in the Risk tab.
+        for (let i = 0; i < bulkCount; i++) {
+            if (stopBatchRef.current) break;
 
-        if (delay > 0) {
-            // Sequential mode: one contract at a time with delay in between
-            for (let i = 0; i < bulkCount; i++) {
-                if (stopBatchRef.current) break;
-                const [result] = await Promise.allSettled([buyOne(contractType, api)]);
-                if (result.status === 'fulfilled') recordBuy(result.value);
-                else recordError(i, result.reason);
-                completedCount++;
-                setBatchProgress({ current: completedCount, total: bulkCount });
-                if (i < bulkCount - 1 && !stopBatchRef.current) {
-                    await new Promise(res => setTimeout(res, delay));
-                }
-            }
-        } else {
-            // ---------------------------------------------------------------
-            // 2-phase same-tick mode:
-            //   Phase A – collect ALL proposals in parallel (grouped to stay
-            //             within Deriv's rate limit).
-            //   Phase B – fire ALL buy requests at the same instant so every
-            //             contract lands on the same entry/exit tick.
-            // ---------------------------------------------------------------
+            const [result] = await Promise.allSettled([buyOne(contractType, api)]);
+            if (result.status === 'fulfilled') recordBuy(result.value);
+            else recordError(i, result.reason);
 
-            // Phase A: gather proposals
-            const allProposalResults: Array<PromiseSettledResult<any>> = [];
-            for (let offset = 0; offset < bulkCount; offset += CONCURRENCY) {
-                if (stopBatchRef.current) break;
-                const groupSize = Math.min(CONCURRENCY, bulkCount - offset);
-                const group = await Promise.allSettled(
-                    Array.from({ length: groupSize }, () => api.send(buildProposalReq()))
-                );
-                allProposalResults.push(...group);
-            }
-
-            // Separate valid proposals from failed ones
-            type ValidEntry = { proposalValue: any; originalIndex: number };
-            const validProposals: ValidEntry[] = [];
-            allProposalResults.forEach((r, i) => {
-                if (r.status === 'rejected' || (r as PromiseFulfilledResult<any>).value?.error) {
-                    const errMsg = r.status === 'rejected'
-                        ? (r.reason?.message || 'Proposal failed')
-                        : ((r as PromiseFulfilledResult<any>).value.error.message || 'Proposal failed');
-                    recordError(i, new Error(errMsg));
-                    completedCount++;
-                } else {
-                    validProposals.push({ proposalValue: (r as PromiseFulfilledResult<any>).value, originalIndex: i });
-                }
-            });
-
+            completedCount++;
             setBatchProgress({ current: completedCount, total: bulkCount });
 
-            if (validProposals.length > 0 && !stopBatchRef.current) {
-                // Phase B: fire ALL buy requests simultaneously → same tick for all
-                const buyResults = await Promise.allSettled(
-                    validProposals.map(({ proposalValue }) =>
-                        api.send({
-                            buy: proposalValue.proposal.id,
-                            price: proposalValue.proposal.ask_price,
-                        })
-                    )
-                );
-
-                buyResults.forEach((result, idx) => {
-                    const originalIndex = validProposals[idx].originalIndex;
-                    if (result.status === 'fulfilled') {
-                        const buyRes = result.value;
-                        if (buyRes?.error) {
-                            recordError(originalIndex, new Error(buyRes.error.message || 'Buy failed'));
-                        } else if (buyRes?.buy?.contract_id) {
-                            recordBuy(buyRes.buy);
-                        } else {
-                            recordError(originalIndex, new Error('No contract_id in buy response'));
-                        }
-                    } else {
-                        recordError(originalIndex, result.reason);
-                    }
-                    completedCount++;
-                });
-
-                setBatchProgress({ current: completedCount, total: bulkCount });
+            // Apply inter-trade delay (if configured in the Risk tab)
+            if (delay > 0 && i < bulkCount - 1 && !stopBatchRef.current) {
+                await new Promise(res => setTimeout(res, delay));
             }
         }
 
