@@ -18,6 +18,10 @@ export const DBOT_TABS: TDashboardTabIndex = Object.freeze({
     FREE_BOTS: 1,
     SMART_TRADER: 2,
     DTRADER: 3,
+    BATCH_TRADER: 4,
+    TRADING_VIEW: 5,
+    ANALYSIS_TOOL: 6,
+    SIGNALS: 7,
     TUTORIAL: 997,
 });
 
