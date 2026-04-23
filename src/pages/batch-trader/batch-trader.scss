@@ -697,6 +697,16 @@
         color: #1e3a5f;
         word-break: break-word;
     }
+
+    &__bulk {
+        font-size: 12px;
+        font-weight: 700;
+        color: #2563eb;
+        background: #dbeafe;
+        border-radius: 4px;
+        padding: 1px 6px;
+        margin-left: 4px;
+    }
 }
 
 .bbt-stats-panel,

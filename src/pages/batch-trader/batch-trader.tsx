@@ -127,6 +127,8 @@ const BatchTrader: React.FC = observer(() => {
     const pnlRef = useRef(0);
     const riskRef = useRef({ stopLoss: 0, takeProfit: 0 });
     riskRef.current = { stopLoss, takeProfit };
+    const delayMsRef = useRef(0);
+    delayMsRef.current = delayMs;
     const settledContractsRef = useRef<Set<string>>(new Set());
     const pipSizeRef = useRef<number>(2);
     const authorizedRef = useRef(false);
@@ -403,55 +405,76 @@ const BatchTrader: React.FC = observer(() => {
         });
 
         // -----------------------------------------------------------------------
-        // PHASE 1: Buy in groups of 5 simultaneously.
-        // Each group lands on the same tick (same entry/exit spot).
-        // Groups of 5 stay within Deriv's concurrent-request limit.
+        // PHASE 1: Purchase the selected contract `bulkCount` times.
+        // When a delay is set (Risk tab), trades run one at a time with that
+        // delay between them.  Without a delay they run in concurrent groups of
+        // 5 to stay within Deriv's request-rate limit.
         // -----------------------------------------------------------------------
         const CONCURRENCY = 5;
         const successfulBuys: Array<{ buy: any; contractId: string }> = [];
         let completedCount = 0;
+        const delay = delayMsRef.current;
 
         setBatchProgress({ current: 0, total: bulkCount });
 
-        for (let offset = 0; offset < bulkCount; offset += CONCURRENCY) {
-            if (stopBatchRef.current) break;
-            const groupSize = Math.min(CONCURRENCY, bulkCount - offset);
+        const recordBuy = (buy: any) => {
+            const contractId = String(buy.contract_id);
+            successfulBuys.push({ buy, contractId });
+            setTrades(prev => [{
+                id: contractId,
+                contractType,
+                buyPrice: parseFloat(buy.buy_price),
+                status: 'pending' as const,
+                profit: 0,
+                time: new Date().toLocaleTimeString(),
+            }, ...prev]);
+        };
 
-            const groupResults = await Promise.allSettled(
-                Array.from({ length: groupSize }, () => buyOne(contractType, api))
-            );
+        const recordError = (tradeIndex: number, reason: any) => {
+            const errMsg = (reason as any)?.message || 'Trade failed';
+            setTradeErrors(prev => [...prev.slice(-4), `Trade ${tradeIndex + 1}: ${errMsg}`]);
+            setTrades(prev => [{
+                id: `err-${Date.now()}-${tradeIndex}`,
+                contractType,
+                buyPrice: stakeVal,
+                status: 'error' as const,
+                profit: 0,
+                error: errMsg,
+                time: new Date().toLocaleTimeString(),
+            }, ...prev]);
+        };
 
-            groupResults.forEach((result, j) => {
-                const tradeIndex = offset + j;
-                if (result.status === 'fulfilled') {
-                    const buy = result.value;
-                    const contractId = String(buy.contract_id);
-                    successfulBuys.push({ buy, contractId });
-                    setTrades(prev => [{
-                        id: contractId,
-                        contractType,
-                        buyPrice: parseFloat(buy.buy_price),
-                        status: 'pending' as const,
-                        profit: 0,
-                        time: new Date().toLocaleTimeString(),
-                    }, ...prev]);
-                } else {
-                    const errMsg = (result.reason as any)?.message || 'Trade failed';
-                    setTradeErrors(prev => [...prev.slice(-4), `Trade ${tradeIndex + 1}: ${errMsg}`]);
-                    setTrades(prev => [{
-                        id: `err-${Date.now()}-${tradeIndex}`,
-                        contractType,
-                        buyPrice: stakeVal,
-                        status: 'error' as const,
-                        profit: 0,
-                        error: errMsg,
-                        time: new Date().toLocaleTimeString(),
-                    }, ...prev]);
+        if (delay > 0) {
+            // Sequential mode: one contract at a time with delay in between
+            for (let i = 0; i < bulkCount; i++) {
+                if (stopBatchRef.current) break;
+                const [result] = await Promise.allSettled([buyOne(contractType, api)]);
+                if (result.status === 'fulfilled') recordBuy(result.value);
+                else recordError(i, result.reason);
+                completedCount++;
+                setBatchProgress({ current: completedCount, total: bulkCount });
+                if (i < bulkCount - 1 && !stopBatchRef.current) {
+                    await new Promise(res => setTimeout(res, delay));
                 }
-            });
+            }
+        } else {
+            // Concurrent mode: buy in groups of CONCURRENCY simultaneously
+            for (let offset = 0; offset < bulkCount; offset += CONCURRENCY) {
+                if (stopBatchRef.current) break;
+                const groupSize = Math.min(CONCURRENCY, bulkCount - offset);
 
-            completedCount += groupSize;
-            setBatchProgress({ current: completedCount, total: bulkCount });
+                const groupResults = await Promise.allSettled(
+                    Array.from({ length: groupSize }, () => buyOne(contractType, api))
+                );
+
+                groupResults.forEach((result, j) => {
+                    if (result.status === 'fulfilled') recordBuy(result.value);
+                    else recordError(offset + j, result.reason);
+                });
+
+                completedCount += groupSize;
+                setBatchProgress({ current: completedCount, total: bulkCount });
+            }
         }
 
         // -----------------------------------------------------------------------
@@ -699,9 +722,15 @@ const BatchTrader: React.FC = observer(() => {
                                 <div className='bbt-preview'>
                                     <span className='bbt-preview__label'>Will execute:</span>
                                     <span className='bbt-preview__spec'>
-                                        {bulkCount}× [{currentContract.aLabel}{showPrediction ? ` ${prediction}` : ''} / {currentContract.bLabel}{showPrediction ? ` ${prediction}` : ''}]
+                                        {bulkCount}×{' '}
+                                        <strong>{currentContract.aLabel}{showPrediction ? ` ${prediction}` : ''}</strong>
+                                        {' '}or{' '}
+                                        <strong>{currentContract.bLabel}{showPrediction ? ` ${prediction}` : ''}</strong>
                                         {' · '}{duration} tick{duration > 1 ? 's' : ''}
-                                        {' · '}{stake.toFixed(2)} {currency}
+                                        {' · '}{stake.toFixed(2)} {currency} each
+                                        {bulkCount > 1 && (
+                                            <span className='bbt-preview__bulk'> ({bulkCount} contracts per click)</span>
+                                        )}
                                     </span>
                                 </div>
 
@@ -709,7 +738,9 @@ const BatchTrader: React.FC = observer(() => {
                                     {isExecuting && (
                                         <div className='bbt-actions__progress'>
                                             <div className='bbt-actions__spinner' />
-                                            Trade {batchProgress.current + 1} of {batchProgress.total}...
+                                            {batchProgress.current < batchProgress.total
+                                                ? `Buying trade ${batchProgress.current + 1} of ${batchProgress.total}...`
+                                                : `All ${batchProgress.total} trade${batchProgress.total > 1 ? 's' : ''} placed — awaiting settlement...`}
                                         </div>
                                     )}
                                     <div className='bbt-actions__row'>
