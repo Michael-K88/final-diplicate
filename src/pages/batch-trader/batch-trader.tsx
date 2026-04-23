@@ -405,60 +405,56 @@ const BatchTrader: React.FC = observer(() => {
         });
 
         // -----------------------------------------------------------------------
-        // PHASE 1: Purchase the selected contract bulkCount times, one by one.
-        // An optional inter-trade delay can be configured in the Risk tab.
+        // PHASE 1: Purchase ALL bulkCount contracts simultaneously so they all
+        // share the same entry spot (same market tick at time of submission).
         // -----------------------------------------------------------------------
         const successfulBuys: Array<{ buy: any; contractId: string }> = [];
-        let completedCount = 0;
-        const delay = delayMsRef.current;
 
         setBatchProgress({ current: 0, total: bulkCount });
 
-        const recordBuy = (buy: any) => {
-            const contractId = String(buy.contract_id);
-            successfulBuys.push({ buy, contractId });
-            setTrades(prev => [{
-                id: contractId,
-                contractType,
-                buyPrice: parseFloat(buy.buy_price),
-                status: 'pending' as const,
-                profit: 0,
-                time: new Date().toLocaleTimeString(),
-            }, ...prev]);
-        };
+        // Fire all N buy requests at the exact same moment
+        const buyResults = await Promise.allSettled(
+            Array.from({ length: bulkCount }, (_, i) =>
+                stopBatchRef.current ? Promise.reject(new Error('Stopped')) : buyOne(contractType, api)
+            )
+        );
 
-        const recordError = (tradeIndex: number, reason: any) => {
-            const errMsg = (reason as any)?.message || 'Trade failed';
-            setTradeErrors(prev => [...prev.slice(-4), `Trade ${tradeIndex + 1}: ${errMsg}`]);
-            setTrades(prev => [{
-                id: `err-${Date.now()}-${tradeIndex}`,
-                contractType,
-                buyPrice: stakeVal,
-                status: 'error' as const,
-                profit: 0,
-                error: errMsg,
-                time: new Date().toLocaleTimeString(),
-            }, ...prev]);
-        };
+        const now = new Date().toLocaleTimeString();
+        const newTrades: Trade[] = [];
+        const newErrors: string[] = [];
 
-        // Buy the selected contract one at a time, bulkCount times.
-        // Each iteration purchases exactly one contract; an optional delay
-        // between purchases can be set in the Risk tab.
-        for (let i = 0; i < bulkCount; i++) {
-            if (stopBatchRef.current) break;
-
-            const [result] = await Promise.allSettled([buyOne(contractType, api)]);
-            if (result.status === 'fulfilled') recordBuy(result.value);
-            else recordError(i, result.reason);
-
-            completedCount++;
-            setBatchProgress({ current: completedCount, total: bulkCount });
-
-            // Apply inter-trade delay (if configured in the Risk tab)
-            if (delay > 0 && i < bulkCount - 1 && !stopBatchRef.current) {
-                await new Promise(res => setTimeout(res, delay));
+        buyResults.forEach((result, i) => {
+            if (result.status === 'fulfilled') {
+                const buy = result.value;
+                const contractId = String(buy.contract_id);
+                successfulBuys.push({ buy, contractId });
+                newTrades.push({
+                    id: contractId,
+                    contractType,
+                    buyPrice: parseFloat(buy.buy_price),
+                    status: 'pending' as const,
+                    profit: 0,
+                    time: now,
+                });
+            } else {
+                const errMsg = (result.reason as any)?.message || 'Trade failed';
+                newErrors.push(`Trade ${i + 1}: ${errMsg}`);
+                newTrades.push({
+                    id: `err-${Date.now()}-${i}`,
+                    contractType,
+                    buyPrice: stakeVal,
+                    status: 'error' as const,
+                    profit: 0,
+                    error: errMsg,
+                    time: now,
+                });
             }
-        }
+        });
+
+        // Add all trades to the log in one batch update
+        setTrades(prev => [...newTrades, ...prev]);
+        if (newErrors.length) setTradeErrors(prev => [...prev, ...newErrors].slice(-10));
+        setBatchProgress({ current: bulkCount, total: bulkCount });
 
         // -----------------------------------------------------------------------
         // PHASE 2: Watch all settlements concurrently (non-blocking per contract)
@@ -722,8 +718,8 @@ const BatchTrader: React.FC = observer(() => {
                                         <div className='bbt-actions__progress'>
                                             <div className='bbt-actions__spinner' />
                                             {batchProgress.current < batchProgress.total
-                                                ? `Buying trade ${batchProgress.current + 1} of ${batchProgress.total}...`
-                                                : `All ${batchProgress.total} trade${batchProgress.total > 1 ? 's' : ''} placed — awaiting settlement...`}
+                                                ? `Placing ${batchProgress.total} contract${batchProgress.total > 1 ? 's' : ''} simultaneously...`
+                                                : `All ${batchProgress.total} contract${batchProgress.total > 1 ? 's' : ''} placed — awaiting settlement...`}
                                         </div>
                                     )}
                                     <div className='bbt-actions__row'>
